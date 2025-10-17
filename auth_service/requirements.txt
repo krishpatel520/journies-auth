@@ -1,0 +1,41 @@
+# Django core framework for building web applications
+Django>=4.2,<5.0
+
+# PostgreSQL database adapter for Python (modern async-friendly version)
+psycopg>=3.2.10
+
+# Testing framework for Python
+pytest>=7.0
+
+# Pytest plugin for testing Django apps
+pytest-django>=4.5.0
+
+# Plugin to measure test coverage
+pytest-cov>=4.0.0
+
+# Factory library for generating test data
+factory-boy>=3.3.0
+
+# HTTP library for making API calls (used in integrations or external service calls)
+requests>=2.31.0
+
+# Production-grade WSGI server for running Django apps
+gunicorn>=21.2.0
+
+# Middleware for handling Cross-Origin Resource Sharing (CORS) in Django
+django-cors-headers>=4.3.0
+
+# Useful Django extensions for development (e.g., shell_plus, runscript)
+django-extensions>=3.2.0
+
+# Library for reading environment variables from `.env` files
+python-decouple>=3.8
+
+
+# Coding conventions
+ruff>=0.1.0
+# Django REST Framework for API development
+djangorestframework>=3.14.0
+ 
+# Swagger/OpenAPI documentation for DRF
+drf-yasg>=1.21.0

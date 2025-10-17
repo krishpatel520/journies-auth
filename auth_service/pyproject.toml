@@ -1,0 +1,22 @@
+[project]
+name = "auth-service"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "django>=4.2,<5.0",
+    "django-cors-headers>=4.3.0",
+    "django-extensions>=3.2.0",
+    "djangorestframework>=3.14.0",
+    "drf-yasg>=1.21.0",
+    "factory-boy>=3.3.0",
+    "gunicorn>=21.2.0",
+    "psycopg>=3.2.10",
+    "pytest>=7.0",
+    "pytest-cov>=4.0.0",
+    "pytest-django>=4.5.0",
+    "python-decouple>=3.8",
+    "requests>=2.31.0",
+    "ruff>=0.1.0",
+]
