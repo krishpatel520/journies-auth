@@ -58,3 +58,4 @@ venv.bak/
 
 # C extensions
 *.so
+Logs/

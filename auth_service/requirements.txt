@@ -39,3 +39,9 @@ djangorestframework>=3.14.0
  
 # Swagger/OpenAPI documentation for DRF
 drf-yasg>=1.21.0
+
+# Python DotEnv
+python-dotenv>=1.1.1
+
+# PostgreSQL database adapter for Python (modern async-friendly version)
+psycopg2-binary>=2.9.11
