@@ -1,9 +1,6 @@
 # Django core framework for building web applications
 Django>=4.2,<5.0
 
-# PostgreSQL database adapter for Python (modern async-friendly version)
-psycopg>=3.2.10
-
 # Testing framework for Python
 pytest>=7.0
 
@@ -31,7 +28,6 @@ django-extensions>=3.2.0
 # Library for reading environment variables from `.env` files
 python-decouple>=3.8
 
-
 # Coding conventions
 ruff>=0.1.0
 # Django REST Framework for API development
@@ -39,9 +35,6 @@ djangorestframework>=3.14.0
  
 # Swagger/OpenAPI documentation for DRF
 drf-yasg>=1.21.0
-
-# Python DotEnv
-python-dotenv>=1.1.1
 
 # PostgreSQL database adapter for Python (modern async-friendly version)
 psycopg2-binary>=2.9.11
