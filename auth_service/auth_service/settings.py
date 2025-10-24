@@ -143,9 +143,8 @@ LOGGING = {
     },
 }
 
-FORCE_SCRIPT_NAME = config('BASE_ROUTE')
+FORCE_SCRIPT_NAME = config('BASE_ROUTE')  # Enabled for correct Swagger URLs
 
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
