@@ -25,10 +25,16 @@ def main():
     # Only print startup info once (avoid double printing during auto-reload)
     if len(sys.argv) > 1 and sys.argv[1] == 'runserver' and not os.environ.get('RUN_MAIN'):
         print(f"Starting Django app on port {port}")
-        print(f"Direct access: http://127.0.0.1:{port}/health/")
-        print(f"Reverse proxy: http://127.0.0.1{base_route}/health/\n")
-    execute_from_command_line(sys.argv)
-
+        print(f"Direct Django: http://127.0.0.1:{port}/health/")
+        print(f"Reverse proxy (through nginx): http://127.0.0.1{base_route}/health/\n")
+        print(f"Reverse proxy (through nginx): http://127.0.0.1{base_route}/swagger/\n")
+    
+    try:
+        execute_from_command_line(sys.argv)
+    except Exception as e:
+        print(f"Error starting Django: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
     main()

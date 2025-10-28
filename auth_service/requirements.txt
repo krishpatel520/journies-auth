@@ -38,3 +38,6 @@ drf-yasg>=1.21.0
 
 # PostgreSQL database adapter for Python (modern async-friendly version)
 psycopg2-binary>=2.9.11
+
+# Static file serving for production
+whitenoise>=6.6.0
