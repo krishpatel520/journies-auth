@@ -181,8 +181,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.warning(f"Login attempt for locked account: {email}")
                     return Response({'error': 'Account temporarily locked due to multiple failed attempts'}, status=status.HTTP_423_LOCKED)
                 
-                # Compare frontend hash with stored hash
-                if user.password == password:  # Direct hash comparison
+                # Verify password using Django's secure verification
+                if user.check_password(password):  # bcrypt verification
                     # Authentication successful - reset failed attempts
                     user.reset_failed_attempts()
                 else:
@@ -369,7 +369,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     is_active=True
                 )
                 
-                user.password = data['password']
+                user.set_password(data['password'])  # Apply bcrypt hashing
                 user.save()
                 
                 token_data = user.generate_jwt_token()

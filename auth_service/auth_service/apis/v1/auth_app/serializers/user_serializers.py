@@ -27,10 +27,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         last_name = validated_data.get('last_name', '')
         validated_data['full_name'] = f"{first_name} {last_name}".strip()
         
-        # Password is already hashed from frontend
-        hashed_password = validated_data.pop('password')
+        # Apply server-side bcrypt hashing to frontend hash
+        frontend_hash = validated_data.pop('password')
         user = UserModel.objects.create(**validated_data)
-        user.password = hashed_password  # Store frontend hash directly
+        user.set_password(frontend_hash)  # Apply bcrypt to frontend hash
         user.save()
         return user
 
@@ -57,7 +57,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         
         password = validated_data.pop('password', None)
         if password:
-            instance.password = password  # Store frontend hash directly
+            instance.set_password(password)  # Apply bcrypt to frontend hash
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
