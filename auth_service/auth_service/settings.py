@@ -42,18 +42,22 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # For production static files
+    'auth_service.middleware.rate_limiting.RateLimitMiddleware',  # Rate limiting
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'auth_service.middleware.jwt_auth.JWTAuthenticationMiddleware',  # JWT authentication - BEFORE Django auth
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'auth_service.middleware.tenant_context.TenantContextMiddleware',  # Multi-tenant RLS
 ]
 
-# CSRF exemption for Swagger
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000', 'http://localhost:8000', 'http://192.168.70.212']
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
+# CSRF and Security Settings
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://127.0.0.1:8000,http://localhost:8000').split(',')
+CSRF_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)
+SESSION_COOKIE_SECURE = not config('DEBUG', default=False, cast=bool)
+SECURE_SSL_REDIRECT = not config('DEBUG', default=False, cast=bool)
 
 ROOT_URLCONF = 'auth_service.urls'
 
@@ -161,14 +165,58 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'WARNING',
+        'level': 'INFO' if config('DEBUG', default=False, cast=bool) else 'WARNING',
     },
 }
 
-FORCE_SCRIPT_NAME = config('BASE_ROUTE') 
+FORCE_SCRIPT_NAME = config('BASE_ROUTE')  # Required for nginx proxy
+
+# JWT Configuration
+JWT_PRIVATE_KEY_PATH = config('JWT_PRIVATE_KEY_PATH')
+JWT_PUBLIC_KEY_PATH = config('JWT_PUBLIC_KEY_PATH')
+JWT_ISSUER = config('JWT_ISSUER')
+JWT_ALGORITHM = config('JWT_ALGORITHM')
 
 # USE_X_FORWARDED_HOST = True  # Disabled for static files
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Disabled for static files
 
+# Custom User Model
+AUTH_USER_MODEL = 'auth_app.UserModel'
 
+# Cache Configuration for Rate Limiting
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'rate-limit-cache',
+    }
+}
 
+# REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
+
+# Swagger JWT Authentication
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'JSON_EDITOR': True,
+    'SUPPORTED_SUBMIT_METHODS': ['get', 'post', 'put', 'delete', 'patch'],
+    'OPERATIONS_SORTER': 'alpha',
+    'TAGS_SORTER': 'alpha',
+    'DOC_EXPANSION': 'none',
+    'DEEP_LINKING': True,
+    'SHOW_EXTENSIONS': True,
+    'SHOW_COMMON_EXTENSIONS': True,
+}

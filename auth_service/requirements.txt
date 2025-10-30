@@ -41,3 +41,12 @@ psycopg2-binary>=2.9.11
 
 # Static file serving for production
 whitenoise>=6.6.0
+
+# JWT library for token handling
+PyJWT>=2.8.0
+
+# Cryptography library for JWT RSA keys
+cryptography>=41.0.0
+
+# Rate limiting for API endpoints
+django-ratelimit>=4.1.0
