@@ -1,8 +1,7 @@
-from django.shortcuts import render
+from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.db import DatabaseError
-from auth_app.models.entity1_model import Entity1
-from auth_app.models.entity2_model import Entity2
+from auth_app.models.user_model import UserModel
 from auth_service.logger import logger_object
 
 logger = logger_object('auth_app.views')
@@ -10,22 +9,33 @@ logger = logger_object('auth_app.views')
 def index(request):
     try:
         logger.info(f"Index view accessed by user: {request.user}")
-        logger.debug("Fetching all Entity1 objects")
+        logger.debug("Fetching all UserModel objects")
         
-        items = Entity1.objects.select_related().order_by('-created_at')
+        items = UserModel.objects.order_by('-created_at')
         
         # Add pagination
         paginator = Paginator(items, 25)  # Show 25 items per page
-        page_number = request.GET.get('page')
+        page_number = request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
         
+        users_data = [{
+            'id': user.id,
+            'email': user.email,
+            'created_at': user.created_at
+        } for user in page_obj]
+        
         logger.info(f"Retrieved page {page_obj.number} of {paginator.num_pages}")
-        return render(request, 'auth_app/index.html', {'page_obj': page_obj})
+        return JsonResponse({
+            'users': users_data,
+            'page': page_obj.number,
+            'total_pages': paginator.num_pages,
+            'total_count': paginator.count
+        })
         
     except DatabaseError as e:
         logger.error(f"Database error in index view: {e}")
-        return render(request, 'auth_app/error.html', {'error': 'Database connection error'})
+        return JsonResponse({'error': 'Database connection error'}, status=500)
     except Exception as e:
         logger.error(f"Unexpected error in index view: {e}")
-        return render(request, 'auth_app/error.html', {'error': 'An unexpected error occurred'})
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 

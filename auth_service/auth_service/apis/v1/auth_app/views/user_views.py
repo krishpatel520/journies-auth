@@ -101,10 +101,6 @@ class UserViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         try:
-            print(f"DEBUG: Create user request received")
-            print(f"DEBUG: Request user: {getattr(request, 'user', 'NOT_SET')}")
-            print(f"DEBUG: Request user type: {type(getattr(request, 'user', None))}")
-            
             serializer = self.get_serializer(data=request.data)
             if serializer.is_valid():
                 # Check if email already exists
@@ -116,9 +112,6 @@ class UserViewSet(viewsets.ModelViewSet):
                 
                 # Get tenant from JWT token
                 logger.debug(f"Request user type: {type(request.user)}, value: {request.user}")
-                print(f"DEBUG: Has jwt_user: {hasattr(request, 'jwt_user')}")
-                if hasattr(request, 'jwt_user'):
-                    print(f"DEBUG: jwt_user: {request.jwt_user}")
                 
                 # Try jwt_user first, then user
                 jwt_payload = None
@@ -130,25 +123,20 @@ class UserViewSet(viewsets.ModelViewSet):
                 if jwt_payload:
                     tenant_id = jwt_payload.get('tid')
                     logger.debug(f"Extracted tenant_id: {tenant_id}")
-                    print(f"DEBUG: Extracted tenant_id: {tenant_id}")
                     if tenant_id:
                         from auth_app.models.user_model import Tenant
                         try:
                             tenant = Tenant.objects.get(id=tenant_id)
                             user = serializer.save(tenant=tenant)
                             logger.info(f"User created successfully: {user.email} in tenant: {tenant.code}")
-                            print(f"DEBUG: User created successfully: {user.email}")
                         except Tenant.DoesNotExist:
                             logger.error(f"Tenant not found: {tenant_id}")
-                            print(f"DEBUG: Tenant not found: {tenant_id}")
                             return Response({'error': 'Invalid tenant'}, status=400)
                     else:
                         logger.error("No tenant ID in JWT token")
-                        print(f"DEBUG: No tenant ID in JWT token")
                         return Response({'error': 'No tenant in token'}, status=400)
                 else:
                     logger.error(f"Authentication failed - user type: {type(getattr(request, 'user', None))}")
-                    print(f"DEBUG: Authentication failed - user type: {type(getattr(request, 'user', None))}")
                     return Response({'error': 'Authentication required'}, status=401)
                 
                 return Response({
@@ -157,10 +145,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     'email': user.email
                 }, status=status.HTTP_201_CREATED)
             else:
-                print(f"DEBUG: Serializer validation failed: {serializer.errors}")
                 return Response({'error': 'Invalid input', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(f"DEBUG: Exception in create: {e}")
             logger.error(f"User creation error: {e}")
             return Response({
                 'error': 'User creation failed',
