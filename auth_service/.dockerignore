@@ -43,3 +43,12 @@ Thumbs.db
 .env.local
 .env.*.local
 node_modules
+
+# Security - Keys and certificates
+keys/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+Logs/
