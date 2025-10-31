@@ -5,12 +5,14 @@ from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.conf import settings
 import logging
 
 from auth_app.models.user_model import UserModel, RefreshToken
 from auth_service.apis.v1.auth_app.serializers.user_serializers import UserSerializer, UserCreateSerializer, UserUpdateSerializer, SignupSerializer
 from auth_service.apis.v1.auth_app.serializers.auth_serializers import LoginSerializer, TokenVerifySerializer
 from auth_service.utils.auth_utils import validate_jwt
+from auth_service.utils.redis_client import redis_client
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from datetime import datetime
@@ -129,6 +131,18 @@ class UserViewSet(viewsets.ModelViewSet):
                             tenant = Tenant.objects.get(id=tenant_id)
                             user = serializer.save(tenant=tenant)
                             logger.info(f"User created successfully: {user.email} in tenant: {tenant.code}")
+
+                            # Publish user creation event to Redis
+                            redis_client.publish_event(settings.REDIS_CHANNEL, {
+                                "tenant_id": str(tenant.id),
+                                "user_id": str(user.id),
+                                "email": user.email,
+                                "first_name": user.first_name,
+                                "last_name": user.last_name,
+                                "full_name": user.full_name,
+                                "is_superuser": user.is_superuser,
+                                "is_active": user.is_active
+                            })
                         except Tenant.DoesNotExist:
                             logger.error(f"Tenant not found: {tenant_id}")
                             return Response({'error': 'Invalid tenant'}, status=400)
@@ -371,9 +385,21 @@ class UserViewSet(viewsets.ModelViewSet):
                 
                 user.set_password(data['password'])  # Apply bcrypt hashing
                 user.save()
-                
+
+                # Publish user creation event to Redis
+                redis_client.publish_event(settings.REDIS_CHANNEL, {
+                    "tenant_id": str(tenant.id),
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "full_name": full_name,
+                    "is_superuser": user.is_superuser,
+                    "is_active": user.is_active
+                })
+
                 token_data = user.generate_jwt_token()
-                
+
                 logger.info(f"Successful signup for tenant: {tenant.code}, user: {user.email}")
                 return Response({
                     **token_data,
