@@ -220,3 +220,9 @@ SWAGGER_SETTINGS = {
     'SHOW_EXTENSIONS': True,
     'SHOW_COMMON_EXTENSIONS': True,
 }
+
+# Redis Configuration for Pub/Sub
+REDIS_HOST = config('REDIS_HOST', default='localhost')
+REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
+REDIS_DB = config('REDIS_DB', default=0, cast=int)
+REDIS_CHANNEL = config('REDIS_CHANNEL', default='user_created')

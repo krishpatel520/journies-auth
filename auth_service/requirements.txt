@@ -50,3 +50,6 @@ cryptography>=41.0.0
 
 # Rate limiting for API endpoints
 django-ratelimit>=4.1.0
+
+# Redis client for pub/sub messaging
+redis>=5.0.0
