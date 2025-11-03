@@ -280,9 +280,15 @@ class UserViewSet(viewsets.ModelViewSet):
                         return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
                 except UserModel.DoesNotExist:
                     return Response({'error': 'User not found'}, status=status.HTTP_401_UNAUTHORIZED)
-                
+
                 return Response({
                     'valid': True,
+                    'sub': payload['sub'],
+                    'email': payload['email'],
+                    'tid': payload['tid'],
+                    'tenant_code': payload['tenant_code'],
+                    'is_superuser': payload['is_superuser'],
+                    'is_active': user.is_active,
                     'exp': payload['exp']
                 })
             return Response({'error': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
