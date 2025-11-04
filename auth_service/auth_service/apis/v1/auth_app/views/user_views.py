@@ -10,7 +10,11 @@ import logging
 
 from auth_app.models.user_model import UserModel, RefreshToken
 from auth_service.apis.v1.auth_app.serializers.user_serializers import UserSerializer, UserCreateSerializer, UserUpdateSerializer, SignupSerializer
-from auth_service.apis.v1.auth_app.serializers.auth_serializers import LoginSerializer, TokenVerifySerializer
+from auth_service.apis.v1.auth_app.serializers.auth_serializers import (
+    LoginSerializer, TokenVerifySerializer, EmailVerificationSerializer,
+    ResendVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
+    CheckVerificationStatusSerializer
+)
 from auth_service.utils.auth_utils import validate_jwt
 from auth_service.utils.redis_client import redis_client
 from drf_yasg.utils import swagger_auto_schema
@@ -211,8 +215,17 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.warning(f"Login attempt for deleted user: {email}")
                     return Response({'error': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
                 if not user.is_active:
-                    logger.warning(f"Login attempt for inactive user: {email}")
-                    return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
+                    # Check if user needs email verification
+                    if not user.is_email_verified:
+                        logger.warning(f"Login attempt for unverified user: {email}")
+                        return Response({
+                            'error': 'Please check your email to verify your account.',
+                            'verification_required': True,
+                            'email': user.email
+                        }, status=status.HTTP_401_UNAUTHORIZED)
+                    else:
+                        logger.warning(f"Login attempt for inactive user: {email}")
+                        return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
                 
                 token_data = user.generate_jwt_token()
                 logger.info(f"Successful login for user: {email}")
@@ -380,11 +393,19 @@ class UserViewSet(viewsets.ModelViewSet):
                     last_name=last_name,
                     full_name=full_name,
                     is_superuser=True,
-                    is_active=True
+                    is_active=False  # Inactive until email verified
                 )
                 
                 user.set_password(data['password'])  # Apply bcrypt hashing
                 user.save()
+                
+                # Send verification email
+                try:
+                    user.send_verification_email(request)
+                    email_sent = True
+                except Exception as e:
+                    logger.error(f"Failed to send verification email: {e}")
+                    email_sent = False
 
                 # Publish user creation event to Redis
                 redis_client.publish_event(settings.REDIS_CHANNEL, {
@@ -398,17 +419,138 @@ class UserViewSet(viewsets.ModelViewSet):
                     "is_active": user.is_active
                 })
 
-                token_data = user.generate_jwt_token()
-
                 logger.info(f"Successful signup for tenant: {tenant.code}, user: {user.email}")
-                return Response({
-                    **token_data,
-                    'message': 'Signup successful'
-                }, status=201)
+                
+                if email_sent:
+                    return Response({
+                        'message': "We have sent a verification link to your email.",
+                        'email': user.email,
+                        'verification_required': True
+                    }, status=201)
+                else:
+                    return Response({
+                        'message': 'Account created but failed to send verification email',
+                        'email': user.email,
+                        'verification_required': True,
+                        'retry_available': True
+                    }, status=201)
                 
         except Exception as e:
             logger.error(f"Signup error: {e}")
             return Response({'error': 'Signup failed', 'details': str(e)}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=EmailVerificationSerializer,
+        responses={200: 'Email verified successfully', 400: 'Invalid or expired token'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def verify_email(self, request):
+        """Verify email with token and redirect to select plan"""
+        try:
+            serializer = EmailVerificationSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+            
+            token = serializer.validated_data['token']
+            
+            try:
+                user = UserModel.objects.get(email_verification_token=token, is_email_verified=False)
+                if user.verify_email(token):
+                    user.is_active = True  # Activate user after email verification
+                    user.save()
+                    
+                    logger.info(f"Email verified successfully for user: {user.email}")
+                    
+                    # Generate tokens for authenticated session
+                    token_data = user.generate_jwt_token()
+                    
+                    return Response({
+                        **token_data,
+                        'message': 'Your email has been verified successfully! Your account is now active.',
+                        'redirect_url': f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/select-plan"
+                    })
+                else:
+                    return Response({'error': 'Invalid or expired verification token'}, status=400)
+                    
+            except UserModel.DoesNotExist:
+                return Response({'error': 'Invalid verification token'}, status=400)
+                
+        except Exception as e:
+            logger.error(f"Email verification error: {e}")
+            return Response({'error': 'Email verification failed'}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=ResendVerificationSerializer,
+        responses={200: 'Verification email sent', 400: 'Invalid email or already verified'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def resend_verification(self, request):
+        """Resend email verification"""
+        try:
+            serializer = ResendVerificationSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+            
+            email = serializer.validated_data['email']
+            
+            try:
+                user = UserModel.objects.get(email=email, is_email_verified=False)
+                if user.is_active and user.is_email_verified:
+                    return Response({'error': 'Email already verified'}, status=400)
+                
+                try:
+                    user.send_verification_email(request)
+                    logger.info(f"Verification email resent to: {email}")
+                    return Response({'message': 'Verification link resent successfully.'})
+                except Exception as e:
+                    logger.error(f"Failed to resend verification email: {e}")
+                    return Response({'error': 'Unable to resend link. Please check your connection and try again.'}, status=500)
+                
+            except UserModel.DoesNotExist:
+                return Response({'error': 'User not found or email already verified'}, status=400)
+                
+        except Exception as e:
+            logger.error(f"Resend verification error: {e}")
+            return Response({'error': 'Unable to resend link. Please check your connection and try again.'}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=CheckVerificationStatusSerializer,
+        responses={200: 'Verification status', 400: 'Invalid email'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def check_verification_status(self, request):
+        """Check if user needs email verification"""
+        try:
+            serializer = CheckVerificationStatusSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+            
+            email = serializer.validated_data['email']
+            
+            try:
+                user = UserModel.objects.get(email=email, is_deleted=False)
+                
+                if user.is_email_verified and user.is_active:
+                    return Response({
+                        'verified': True,
+                        'message': 'Email already verified'
+                    })
+                else:
+                    return Response({
+                        'verified': False,
+                        'message': 'Please check your email to verify your account.',
+                        'resend_available': True
+                    })
+                    
+            except UserModel.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+                
+        except Exception as e:
+            logger.error(f"Check verification status error: {e}")
+            return Response({'error': "We're having trouble right now. Please refresh or try again later."}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -467,6 +609,73 @@ class UserViewSet(viewsets.ModelViewSet):
             logger.error(f"Logout error: {e}")
             return Response({'error': 'Logout failed', 'details': str(e)}, status=500)
     
+    @swagger_auto_schema(
+        method='post',
+        request_body=ForgotPasswordSerializer,
+        responses={200: 'Reset link sent', 400: 'Invalid email', 404: 'Email not found'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def forgot_password(self, request):
+        """Send password reset link to email"""
+        try:
+            serializer = ForgotPasswordSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+            
+            email = serializer.validated_data['email']
+            
+            try:
+                user = UserModel.objects.get(email=email, is_deleted=False)
+                if not user.is_active:
+                    return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
+                
+                user.send_password_reset_email(request)
+                logger.info(f"Password reset email sent to: {email}")
+                return Response({'message': "We've sent a password reset link to your email. Please check your inbox or spam folder."})
+                
+            except UserModel.DoesNotExist:
+                return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
+                
+        except Exception as e:
+            logger.error(f"Forgot password error: {e}")
+            return Response({'error': 'Failed to send reset email'}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=ResetPasswordSerializer,
+        responses={200: 'Password reset successful', 400: 'Invalid token or password', 404: 'Token expired'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def reset_password(self, request):
+        """Reset password using token"""
+        try:
+            serializer = ResetPasswordSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+            
+            token = serializer.validated_data['token']
+            new_password = serializer.validated_data['new_password']
+            
+            try:
+                user = UserModel.objects.get(password_reset_token=token, is_deleted=False)
+                
+                # Check if user is trying to reuse old password
+                if user.check_password(new_password):
+                    return Response({'error': 'This password was used recently. Please choose a new one.'}, status=400)
+                
+                if user.reset_password_with_token(token, new_password):
+                    logger.info(f"Password reset successful for user: {user.email}")
+                    return Response({'message': 'Your password has been reset successfully. Please sign in with your new password.'})
+                else:
+                    return Response({'error': 'Invalid or expired reset token'}, status=400)
+                    
+            except UserModel.DoesNotExist:
+                return Response({'error': 'Invalid or expired reset token'}, status=400)
+                
+        except Exception as e:
+            logger.error(f"Reset password error: {e}")
+            return Response({'error': 'Password reset failed'}, status=500)
+    
     # @swagger_auto_schema(
     #     method='post',
     #     request_body=openapi.Schema(
@@ -511,69 +720,69 @@ class UserViewSet(viewsets.ModelViewSet):
     #         logger.error(f"Password reset error: {e}")
     #         return Response({'error': 'Password reset failed'}, status=500)
     
-    # @swagger_auto_schema(
-    #     method='post',
-    #     request_body=openapi.Schema(
-    #         type=openapi.TYPE_OBJECT,
-    #         properties={
-    #             'current_password': openapi.Schema(type=openapi.TYPE_STRING),
-    #             'new_password': openapi.Schema(type=openapi.TYPE_STRING)
-    #         },
-    #         required=['current_password', 'new_password']
-    #     ),
-    #     manual_parameters=[
-    #         openapi.Parameter(
-    #             'Authorization',
-    #             openapi.IN_HEADER,
-    #             description='Bearer <token>',
-    #             type=openapi.TYPE_STRING,
-    #             required=True
-    #         )
-    #     ],
-    #     responses={200: 'Password changed successfully', 400: 'Validation error', 401: 'Invalid current password'}
-    # )
-    # @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    # def change_password(self, request):
-    #     """Change password with frontend-hashed passwords"""
-    #     try:
-    #         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-    #         if not auth_header.startswith('Bearer '):
-    #             return Response({'error': 'Authorization header required'}, status=401)
+    @swagger_auto_schema(
+        method='post',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'current_password': openapi.Schema(type=openapi.TYPE_STRING),
+                'new_password': openapi.Schema(type=openapi.TYPE_STRING)
+            },
+            required=['current_password', 'new_password']
+        ),
+        manual_parameters=[
+            openapi.Parameter(
+                'Authorization',
+                openapi.IN_HEADER,
+                description='Bearer <token>',
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={200: 'Password changed successfully', 400: 'Validation error', 401: 'Invalid current password'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def change_password(self, request):
+        """Change password for authenticated user"""
+        try:
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if not auth_header.startswith('Bearer '):
+                return Response({'error': 'Authorization header required'}, status=401)
             
-    #         token = auth_header.split(' ')[1]
-    #         payload = validate_jwt(token)
+            token = auth_header.split(' ')[1]
+            payload = validate_jwt(token)
             
-    #         if not payload:
-    #             return Response({'error': 'Invalid token'}, status=401)
+            if not payload:
+                return Response({'error': 'Invalid token'}, status=401)
             
-    #         current_password = request.data.get('current_password')
-    #         new_password = request.data.get('new_password')
+            current_password = request.data.get('current_password')
+            new_password = request.data.get('new_password')
             
-    #         if not current_password or not new_password:
-    #             return Response({'error': 'Current and new passwords are required'}, status=400)
+            if not current_password or not new_password:
+                return Response({'error': 'Current and new passwords are required'}, status=400)
             
-    #         try:
-    #             user = UserModel.objects.get(id=payload['sub'])
-    #             if user.is_deleted or not user.is_active:
-    #                 return Response({'error': 'User account is inactive'}, status=401)
+            try:
+                user = UserModel.objects.get(id=payload['sub'])
+                if user.is_deleted or not user.is_active:
+                    return Response({'error': 'User account is inactive'}, status=401)
                 
-    #             # Verify current password (frontend hash comparison)
-    #             if user.password != current_password:
-    #                 return Response({'error': 'Current password is incorrect'}, status=401)
+                # Verify current password using bcrypt
+                if not user.check_password(current_password):
+                    return Response({'error': 'Current password is incorrect'}, status=401)
                 
-    #             # Update to new password (frontend hash)
-    #             user.password = new_password
-    #             user.save()
+                # Update to new password with bcrypt hashing
+                user.set_password(new_password)
+                user.save()
                 
-    #             # Revoke all refresh tokens to force re-login
-    #             RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
+                # Revoke all refresh tokens to force re-login
+                RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
                 
-    #             logger.info(f"Password changed successfully for user: {user.email}")
-    #             return Response({'message': 'Password changed successfully'})
+                logger.info(f"Password changed successfully for user: {user.email}")
+                return Response({'message': 'Password changed successfully'})
                 
-    #         except UserModel.DoesNotExist:
-    #             return Response({'error': 'User not found'}, status=404)
+            except UserModel.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
                 
-    #     except Exception as e:
-    #         logger.error(f"Password change error: {e}")
-    #         return Response({'error': 'Password change failed'}, status=500)
+        except Exception as e:
+            logger.error(f"Password change error: {e}")
+            return Response({'error': 'Password change failed'}, status=500)
