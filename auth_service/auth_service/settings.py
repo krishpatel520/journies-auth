@@ -154,6 +154,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 DYNAMIC_LOG_PATH = os.path.join(BASE_DIR, "Logs")
 
+# Create email files directory if it doesn't exist
+EMAIL_FILES_DIR = os.path.join(BASE_DIR, 'email_files')
+if not os.path.exists(EMAIL_FILES_DIR):
+    os.makedirs(EMAIL_FILES_DIR)
+
 
 LOGGING = {
     'version': 1,
@@ -226,3 +231,31 @@ REDIS_HOST = config('REDIS_HOST', default='localhost')
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_DB = config('REDIS_DB', default=0, cast=int)
 REDIS_CHANNEL = config('REDIS_CHANNEL', default='user_created')
+
+# JWT Public Paths (configurable for microservices)
+JWT_PUBLIC_PATHS = [
+    '/api/v1/users/login/',
+    '/api/v1/users/signup/',
+    '/api/v1/users/verify_token/',
+    '/api/v1/users/refresh_token/',
+    '/.well-known/jwks.json',
+    '/health/',
+    '/swagger/',
+    '/redoc/',
+    '/static/',
+    '/admin/'
+]
+
+# Email Configuration
+# TODO: Switch to SMTP backend for production email sending (needed for MFA/2FA implementation)
+# Currently using file-based backend for development - emails saved to email_files/ directory
+# For production: EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
+EMAIL_FILE_PATH = config('EMAIL_FILE_PATH', default=os.path.join(BASE_DIR, 'email_files'))
+EMAIL_HOST = config('EMAIL_HOST', default='localhost')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')

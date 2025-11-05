@@ -70,6 +70,7 @@ class UserModel(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     full_name = models.TextField(null=True, blank=True)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
     is_superuser = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -78,6 +79,15 @@ class UserModel(AbstractUser):
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='deleted_users')
     updated_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='updated_users')
+    
+    # Email Verification
+    is_email_verified = models.BooleanField(default=False)
+    email_verification_token = models.CharField(max_length=255, null=True, blank=True)
+    email_verification_sent_at = models.DateTimeField(null=True, blank=True)
+    
+    # Password Reset
+    password_reset_token = models.CharField(max_length=255, null=True, blank=True)
+    password_reset_sent_at = models.DateTimeField(null=True, blank=True)
     
     # Brute Force Protection
     failed_login_attempts = models.IntegerField(default=0)
@@ -142,6 +152,94 @@ class UserModel(AbstractUser):
         self.locked_until = None
         self.last_failed_login = None
         self.save()
+    
+    def generate_verification_token(self):
+        """Generate email verification token"""
+        import secrets
+        self.email_verification_token = secrets.token_urlsafe(32)
+        self.email_verification_sent_at = timezone.now()
+        self.save()
+        return self.email_verification_token
+    
+    def send_verification_email(self, request=None):
+        """Send verification email"""
+        # TODO: Replace with HTML email template with proper branding
+        # TODO: Add email delivery monitoring and retry logic
+        # TODO: Implement rate limiting for email sending
+        from django.core.mail import send_mail
+        from django.conf import settings
+        
+        token = self.generate_verification_token()
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        verification_url = f"{base_url}/verify-email?token={token}"
+        
+        send_mail(
+            subject='Verify your email address',
+            message=f'Click the link to verify your email: {verification_url}',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+            recipient_list=[self.email],
+            fail_silently=False,
+        )
+    
+    def verify_email(self, token):
+        """Verify email with token"""
+        if self.email_verification_token == token and not self.is_email_verified:
+            # Check if token is not expired (24 hours)
+            if self.email_verification_sent_at and (timezone.now() - self.email_verification_sent_at).total_seconds() < 86400:
+                self.is_email_verified = True
+                self.email_verification_token = None
+                self.save()
+                return True
+        return False
+    
+    def generate_password_reset_token(self):
+        """Generate password reset token"""
+        import secrets
+        self.password_reset_token = secrets.token_urlsafe(32)
+        self.password_reset_sent_at = timezone.now()
+        self.save()
+        return self.password_reset_token
+    
+    def send_password_reset_email(self, request=None):
+        """Send password reset email"""
+        # TODO: Replace with HTML email template with proper branding
+        # TODO: Add email delivery monitoring and retry logic
+        # TODO: Implement rate limiting for password reset emails
+        from django.core.mail import send_mail
+        from django.conf import settings
+        
+        token = self.generate_password_reset_token()
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        reset_url = f"{base_url}/reset-password?token={token}"
+        
+        send_mail(
+            subject='Reset your password',
+            message=f'Click the link to reset your password: {reset_url}',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+            recipient_list=[self.email],
+            fail_silently=False,
+        )
+    
+    def verify_password_reset_token(self, token):
+        """Verify password reset token"""
+        if self.password_reset_token == token:
+            # Check if token is not expired (1 hour)
+            if self.password_reset_sent_at and (timezone.now() - self.password_reset_sent_at).total_seconds() < 3600:
+                return True
+        return False
+    
+    def reset_password_with_token(self, token, new_password):
+        """Reset password using token"""
+        if self.verify_password_reset_token(token):
+            self.set_password(new_password)
+            self.password_reset_token = None
+            self.password_reset_sent_at = None
+            self.save()
+            
+            # Revoke all refresh tokens
+            RefreshToken.objects.filter(user=self, is_revoked=False).update(is_revoked=True)
+            return True
+        return False
     
     def log_activity(self, action, request=None, status='success', payload=None):
         """Log user activity"""

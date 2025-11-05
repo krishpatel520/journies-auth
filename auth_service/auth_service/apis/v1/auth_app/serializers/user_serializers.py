@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
+import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -7,19 +8,32 @@ logger = logging.getLogger(__name__)
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'is_active', 'date_joined']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 'date_joined']
         read_only_fields = ['id', 'date_joined']
 
 class UserCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
-        fields = ['email', 'password', 'first_name', 'last_name']
+        fields = ['email', 'password', 'first_name', 'last_name', 'phone_number']
         extra_kwargs = {'password': {'write_only': True}}
     
     def validate_password(self, value):
         """Validate frontend-hashed password (SHA256)"""
         if not value or len(value) != 64:  # SHA256 produces 64-char hex string
             raise serializers.ValidationError("Invalid password hash format")
+        return value
+    
+    def validate_phone_number(self, value):
+        """Validate phone number format - exactly 10 digits"""
+        if value:
+            # Remove spaces, dashes, and parentheses for validation
+            cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
+            # Check if it contains only digits
+            if not cleaned.isdigit():
+                raise serializers.ValidationError("Please enter numbers only.")
+            # Check if it's exactly 10 digits
+            if len(cleaned) != 10:
+                raise serializers.ValidationError("Phone number must be exactly 10 digits.")
         return value
     
     def create(self, validated_data):
@@ -39,13 +53,26 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = UserModel
-        fields = ['first_name', 'last_name', 'password']
+        fields = ['first_name', 'last_name', 'phone_number', 'password']
         extra_kwargs = {'password': {'write_only': True}}
     
     def validate_password(self, value):
         """Validate frontend-hashed password (SHA256)"""
         if not value or len(value) != 64:  # SHA256 produces 64-char hex string
             raise serializers.ValidationError("Invalid password hash format")
+        return value
+    
+    def validate_phone_number(self, value):
+        """Validate phone number format - exactly 10 digits"""
+        if value:
+            # Remove spaces, dashes, and parentheses for validation
+            cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
+            # Check if it contains only digits
+            if not cleaned.isdigit():
+                raise serializers.ValidationError("Please enter numbers only.")
+            # Check if it's exactly 10 digits
+            if len(cleaned) != 10:
+                raise serializers.ValidationError("Phone number must be exactly 10 digits.")
         return value
     
     def update(self, instance, validated_data):
@@ -73,9 +100,23 @@ class SignupSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
     first_name = serializers.CharField(max_length=100, required=False)
     last_name = serializers.CharField(max_length=100, required=False)
+    phone_number = serializers.CharField(max_length=20, required=False)
     
     def validate_password(self, value):
         """Validate frontend-hashed password (SHA256)"""
         if not value or len(value) != 64:  # SHA256 produces 64-char hex string
             raise serializers.ValidationError("Invalid password hash format")
+        return value
+    
+    def validate_phone_number(self, value):
+        """Validate phone number format - exactly 10 digits"""
+        if value:
+            # Remove spaces, dashes, and parentheses for validation
+            cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
+            # Check if it contains only digits
+            if not cleaned.isdigit():
+                raise serializers.ValidationError("Please enter numbers only.")
+            # Check if it's exactly 10 digits
+            if len(cleaned) != 10:
+                raise serializers.ValidationError("Phone number must be exactly 10 digits.")
         return value

@@ -71,3 +71,7 @@ keys/
 *.crt
 *.p12
 *.pfx
+
+# Development email files (file-based backend)
+email_files/
+*.log
