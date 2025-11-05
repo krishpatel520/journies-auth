@@ -1,5 +1,5 @@
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from django.conf import settings
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -78,8 +78,8 @@ def generate_jwt(user_id, email, tenant_id, tenant_code, is_superuser=False):
             "tid": str(tenant_id),
             "tenant_code": tenant_code,
             "is_superuser": is_superuser,
-            "iat": datetime.utcnow(),
-            "exp": datetime.utcnow() + timedelta(hours=1),
+            "iat": datetime.now(timezone.utc),
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iss": settings.JWT_ISSUER,
         }
         
