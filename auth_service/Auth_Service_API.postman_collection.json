@@ -1,0 +1,445 @@
+{
+  "info": {
+    "name": "Auth Service API",
+    "description": "JWT Authentication Microservice API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8001/health/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["health", ""]
+        }
+      }
+    },
+    {
+      "name": "2. Signup - Create Tenant & Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenant_name\": \"My Company\",\n  \"tenant_code\": \"MC001\",\n  \"email\": \"admin@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\",\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/signup/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "signup", ""]
+        }
+      }
+    },
+    {
+      "name": "3. Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/login/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "login", ""]
+        }
+      }
+    },
+    {
+      "name": "4. List Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "5. Create User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "6. Get User",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id}}", ""]
+        }
+      }
+    },
+    {
+      "name": "7. Update User",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Smith\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id}}", ""]
+        }
+      }
+    },
+    {
+      "name": "8. Verify Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/verify_token/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "verify_token", ""]
+        }
+      }
+    },
+    {
+      "name": "9. Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/refresh_token/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "refresh_token", ""]
+        }
+      }
+    },
+    {
+      "name": "10. Delete User",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id}}", ""]
+        }
+      }
+    },
+    {
+      "name": "2B. Verify Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{verification_token}}\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/verify_email/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "verify_email", ""]
+        }
+      }
+    },
+    {
+      "name": "5B. Create User 2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"bob@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\",\n  \"first_name\": \"Bob\",\n  \"last_name\": \"Smith\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "5C. Create User 3",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"charlie@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\",\n  \"first_name\": \"Charlie\",\n  \"last_name\": \"Brown\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "5D. Create User 4",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"alice@mycompany.com\",\n  \"password\": \"88eb2eccfd54329091049ca50a9b804879a54021117a5ef7e5883a1d61bc18cd\",\n  \"first_name\": \"Alice\",\n  \"last_name\": \"Johnson\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "7B. Update User 2",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Robert\",\n  \"last_name\": \"Smith-Updated\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id_2}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id_2}}", ""]
+        }
+      }
+    },
+    {
+      "name": "7C. Update User 3",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Charles\",\n  \"last_name\": \"Brown-Updated\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id_3}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id_3}}", ""]
+        }
+      }
+    },
+    {
+      "name": "7D. Update User 4",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Alicia\",\n  \"last_name\": \"Johnson-Updated\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8001/api/v1/users/{{user_id_4}}/",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8001",
+          "path": ["api", "v1", "users", "{{user_id_4}}", ""]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "verification_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id_2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id_3",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id_4",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+
