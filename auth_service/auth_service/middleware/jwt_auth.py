@@ -18,6 +18,8 @@ def JWTAuthenticationMiddleware(get_response):
             '/api/v1/users/check_verification_status/',
             '/api/v1/users/forgot_password/',
             '/api/v1/users/reset_password/',
+            '/api/v1/users/auto_login/',
+            '/api/v1/users/revoke_tokens/',
             '/.well-known/jwks.json',
             '/health/',
             '/swagger/',
@@ -59,8 +61,8 @@ def JWTAuthenticationMiddleware(get_response):
             payload = validate_jwt(token)
 
             if not payload:
-                logger.warning(f"Invalid JWT token for {request.path_info}")
-                return JsonResponse({"detail": "Invalid or expired token"}, status=401)
+                logger.warning(f"Invalid or revoked JWT token for {request.path_info}")
+                return JsonResponse({"detail": "Invalid, expired, or revoked token"}, status=401)
 
             # Check if user still exists and is active
             try:

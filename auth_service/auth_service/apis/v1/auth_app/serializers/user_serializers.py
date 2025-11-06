@@ -102,6 +102,12 @@ class SignupSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=100, required=False)
     phone_number = serializers.CharField(max_length=20, required=False)
     
+    def validate_email(self, value):
+        """Validate email format more strictly"""
+        if not value or '@' not in value:
+            raise serializers.ValidationError("Enter a valid email address.")
+        return value
+    
     def validate_password(self, value):
         """Validate frontend-hashed password (SHA256)"""
         if not value or len(value) != 64:  # SHA256 produces 64-char hex string
@@ -109,7 +115,7 @@ class SignupSerializer(serializers.Serializer):
         return value
     
     def validate_phone_number(self, value):
-        """Validate phone number format - exactly 10 digits"""
+        """Validate phone number format and uniqueness"""
         if value:
             # Remove spaces, dashes, and parentheses for validation
             cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
@@ -119,4 +125,8 @@ class SignupSerializer(serializers.Serializer):
             # Check if it's exactly 10 digits
             if len(cleaned) != 10:
                 raise serializers.ValidationError("Phone number must be exactly 10 digits.")
+            
+            # Check uniqueness
+            if UserModel.objects.filter(phone_number=value).exists():
+                raise serializers.ValidationError("Phone number already exists")
         return value

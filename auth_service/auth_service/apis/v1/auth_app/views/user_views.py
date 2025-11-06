@@ -170,6 +170,13 @@ class UserViewSet(viewsets.ModelViewSet):
                         'error': 'User creation failed'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
+                # Check if phone number already exists
+                phone_number = serializer.validated_data.get('phone_number')
+                if phone_number and UserModel.objects.filter(phone_number=phone_number).exists():
+                    return Response({
+                        'error': 'Phone number already exists'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
                 # Get tenant from JWT token
                 logger.debug(f"Request user type: {type(request.user)}, value: {request.user}")
                 
@@ -434,6 +441,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
                 return Response({'error': 'Email already exists'}, status=400)
             
+            # Check phone number uniqueness if provided
+            phone_number = data.get('phone_number')
+            if phone_number and UserModel.objects.filter(phone_number=phone_number).exists():
+                logger.warning(f"Signup failed - phone number already exists: {phone_number}")
+                return Response({'error': 'Phone number already exists'}, status=400)
+            
             with transaction.atomic():
                 tenant = Tenant.objects.create(
                     name=data['tenant_name'],
@@ -525,10 +538,15 @@ class UserViewSet(viewsets.ModelViewSet):
                     # Generate tokens for authenticated session
                     token_data = user.generate_jwt_token()
                     
+                    # Create auto-login URL for Compass redirect
+                    compass_url = getattr(settings, 'COMPASS_SERVICE_URL', 'http://localhost:3001')
+                    auto_login_url = f"{compass_url}/auto-login?token={token_data['access_token']}&refresh_token={token_data['refresh_token']}"
+                    
                     return Response({
                         **token_data,
                         'message': 'Your email has been verified successfully! Your account is now active.',
-                        'redirect_url': f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/select-plan"
+                        'redirect_url': auto_login_url,
+                        'compass_url': compass_url
                     })
                 else:
                     return Response({'error': 'Invalid or expired verification token'}, status=400)
@@ -627,25 +645,35 @@ class UserViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def logout(self, request):
-        """Logout user by revoking refresh tokens"""
+        """Logout user by revoking refresh tokens and blacklisting access tokens"""
         try:
             auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-            if not auth_header.startswith('Bearer '):
-                logger.warning("Logout attempt without proper authorization header")
-                return Response({'error': 'Authorization header required'}, status=400)
+            if not auth_header:
+                logger.warning("Logout attempt without authorization header")
+                return Response({'error': 'Authorization header required'}, status=401)
             
-            token = auth_header.split(' ')[1]
+            if not auth_header.startswith('Bearer '):
+                logger.warning("Logout attempt with invalid authorization header format")
+                return Response({'error': 'Invalid authorization header format'}, status=401)
+            
+            token_parts = auth_header.split(' ')
+            if len(token_parts) != 2:
+                logger.warning("Logout attempt with malformed authorization header")
+                return Response({'error': 'Invalid authorization header format'}, status=401)
+            
+            token = token_parts[1]
             payload = validate_jwt(token)
             
             if not payload:
                 logger.warning("Logout attempt with invalid token")
-                return Response({'error': 'Invalid token'}, status=401)
+                return Response({'error': 'Invalid or expired token'}, status=401)
             
             user_id = payload.get('sub')
             user_email = payload.get('email')
             
             if user_id:
                 try:
+                    from auth_app.models.user_model import TokenBlacklist
                     user = UserModel.objects.get(id=user_id)
                     
                     # Check if user has any active refresh tokens
@@ -656,6 +684,10 @@ class UserViewSet(viewsets.ModelViewSet):
                     
                     # Revoke all active refresh tokens
                     active_tokens.update(is_revoked=True)
+                    
+                    # Add user to blacklist for immediate access token revocation
+                    TokenBlacklist.revoke_user_tokens(user_id, reason='logout')
+                    
                     logger.info(f"Successful logout for user: {user_email}")
                     return Response({'message': 'Logout successful'})
                 except UserModel.DoesNotExist:
@@ -779,6 +811,109 @@ class UserViewSet(viewsets.ModelViewSet):
     #     except Exception as e:
     #         logger.error(f"Password reset error: {e}")
     #         return Response({'error': 'Password reset failed'}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'token': openapi.Schema(type=openapi.TYPE_STRING),
+                'refresh_token': openapi.Schema(type=openapi.TYPE_STRING)
+            },
+            required=['token']
+        ),
+        responses={200: 'Auto-login successful', 400: 'Invalid token', 401: 'Token expired'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def auto_login(self, request):
+        """Auto-login endpoint for post-verification redirect to Compass"""
+        try:
+            token = request.data.get('token')
+            refresh_token = request.data.get('refresh_token')
+            
+            if not token:
+                return Response({'error': 'Token is required'}, status=400)
+            
+            # Validate the access token
+            payload = validate_jwt(token)
+            if not payload:
+                return Response({'error': 'Invalid or expired token'}, status=401)
+            
+            # Get user details
+            try:
+                user = UserModel.objects.get(id=payload['sub'])
+                if not user.is_active or user.is_deleted:
+                    return Response({'error': 'User account is inactive'}, status=401)
+                
+                # Return user data for Compass to establish session
+                return Response({
+                    'message': 'Auto-login successful',
+                    'user': {
+                        'id': str(user.id),
+                        'email': user.email,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'full_name': user.full_name,
+                        'is_superuser': user.is_superuser,
+                        'tenant_id': str(user.tenant_id),
+                        'tenant_code': user.tenant.code
+                    },
+                    'tokens': {
+                        'access_token': token,
+                        'refresh_token': refresh_token,
+                        'token_type': 'Bearer',
+                        'expires_in': 3600
+                    }
+                })
+                
+            except UserModel.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+                
+        except Exception as e:
+            logger.error(f"Auto-login error: {e}")
+            return Response({'error': 'Auto-login failed'}, status=500)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'user_id': openapi.Schema(type=openapi.TYPE_STRING),
+                'reason': openapi.Schema(type=openapi.TYPE_STRING)
+            },
+            required=['user_id']
+        ),
+        responses={200: 'Tokens revoked successfully', 400: 'Validation error', 404: 'User not found'}
+    )
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def revoke_tokens(self, request):
+        """Revoke all tokens for a user (for other services)"""
+        try:
+            user_id = request.data.get('user_id')
+            reason = request.data.get('reason', 'admin_action')
+            
+            if not user_id:
+                return Response({'error': 'user_id is required'}, status=400)
+            
+            try:
+                from auth_app.models.user_model import TokenBlacklist
+                user = UserModel.objects.get(id=user_id)
+                
+                # Revoke refresh tokens
+                RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
+                
+                # Add to blacklist for access token revocation
+                TokenBlacklist.revoke_user_tokens(user_id, reason=reason)
+                
+                logger.info(f"Tokens revoked for user: {user.email}, reason: {reason}")
+                return Response({'message': 'All tokens revoked successfully'})
+                
+            except UserModel.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+                
+        except Exception as e:
+            logger.error(f"Token revocation error: {e}")
+            return Response({'error': 'Token revocation failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',

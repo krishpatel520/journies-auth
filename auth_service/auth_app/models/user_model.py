@@ -280,6 +280,31 @@ class RefreshToken(models.Model):
         self.is_revoked = True
         self.save()
 
+class TokenBlacklist(models.Model):
+    """Store blacklisted tokens for immediate revocation"""
+    user_id = models.UUIDField(db_index=True)
+    revoked_at = models.DateTimeField(auto_now_add=True)
+    reason = models.CharField(max_length=50, default='logout')
+    
+    class Meta:
+        db_table = 'journies_token_blacklist'
+        indexes = [
+            models.Index(fields=['user_id', 'revoked_at']),
+        ]
+    
+    @classmethod
+    def revoke_user_tokens(cls, user_id, reason='logout'):
+        """Add user to blacklist to revoke all tokens"""
+        cls.objects.create(user_id=user_id, reason=reason)
+    
+    @classmethod
+    def is_token_revoked(cls, user_id, token_issued_at):
+        """Check if token is revoked based on blacklist"""
+        return cls.objects.filter(
+            user_id=user_id,
+            revoked_at__gte=token_issued_at
+        ).exists()
+
 class AuditLog(models.Model):
     """Audit logs for security and compliance"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
