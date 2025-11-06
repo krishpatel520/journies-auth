@@ -64,6 +64,26 @@ class UserViewSet(viewsets.ModelViewSet):
                     except UserModel.DoesNotExist:
                         pass
                 serializer.save()
+
+                # Publish update event to Redis Stream
+                try:
+                    redis_client.publish_event(
+                        settings.REDIS_STREAM_USERS,
+                        {
+                            "tenant_id": str(instance.tenant.id),
+                            "user_id": str(instance.id),
+                            "email": instance.email,
+                            "first_name": instance.first_name,
+                            "last_name": instance.last_name,
+                            "full_name": instance.full_name,
+                            "is_superuser": instance.is_superuser,
+                            "is_active": instance.is_active
+                        },
+                        operation="update"
+                    )
+                except Exception as e:
+                    logger.error(f"Error publishing update event to Redis: {str(e)}")
+
                 return Response(serializer.data)
             return Response({'error': 'Invalid input'}, status=status.HTTP_400_BAD_REQUEST)
         except UserModel.DoesNotExist:
@@ -83,6 +103,26 @@ class UserViewSet(viewsets.ModelViewSet):
                     except UserModel.DoesNotExist:
                         pass
                 serializer.save()
+
+                # Publish update event to Redis Stream
+                try:
+                    redis_client.publish_event(
+                        settings.REDIS_STREAM_USERS,
+                        {
+                            "tenant_id": str(instance.tenant.id),
+                            "user_id": str(instance.id),
+                            "email": instance.email,
+                            "first_name": instance.first_name,
+                            "last_name": instance.last_name,
+                            "full_name": instance.full_name,
+                            "is_superuser": instance.is_superuser,
+                            "is_active": instance.is_active
+                        },
+                        operation="update"
+                    )
+                except Exception as e:
+                    logger.error(f"Error publishing update event to Redis: {str(e)}")
+
                 return Response(serializer.data)
             return Response({'error': 'Invalid input'}, status=status.HTTP_400_BAD_REQUEST)
         except UserModel.DoesNotExist:
@@ -99,8 +139,22 @@ class UserViewSet(viewsets.ModelViewSet):
                     deleted_by = UserModel.objects.get(id=request.jwt_payload['sub'])
                 except UserModel.DoesNotExist:
                     pass
-            
+
             instance.soft_delete(deleted_by=deleted_by)
+
+            # Publish delete event to Redis Stream
+            try:
+                redis_client.publish_event(
+                    settings.REDIS_STREAM_USERS,
+                    {
+                        "tenant_id": str(instance.tenant.id),
+                        "user_id": str(instance.id)
+                    },
+                    operation="delete"
+                )
+            except Exception as e:
+                logger.error(f"Error publishing delete event to Redis: {str(e)}")
+
             return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
         except UserModel.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -136,8 +190,8 @@ class UserViewSet(viewsets.ModelViewSet):
                             user = serializer.save(tenant=tenant)
                             logger.info(f"User created successfully: {user.email} in tenant: {tenant.code}")
 
-                            # Publish user creation event to Redis
-                            redis_client.publish_event(settings.REDIS_CHANNEL, {
+                            # Publish user creation event to Redis Stream
+                            redis_client.publish_event(settings.REDIS_STREAM_USERS, {
                                 "tenant_id": str(tenant.id),
                                 "user_id": str(user.id),
                                 "email": user.email,
@@ -413,8 +467,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.error(f"Failed to send verification email: {e}")
                     email_sent = False
 
-                # Publish user creation event to Redis
-                redis_client.publish_event(settings.REDIS_CHANNEL, {
+                # Publish user creation event to Redis Stream
+                redis_client.publish_event(settings.REDIS_STREAM_USERS, {
                     "tenant_id": str(tenant.id),
                     "user_id": str(user.id),
                     "email": user.email,

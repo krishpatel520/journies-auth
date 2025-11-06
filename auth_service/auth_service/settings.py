@@ -226,11 +226,11 @@ SWAGGER_SETTINGS = {
     'SHOW_COMMON_EXTENSIONS': True,
 }
 
-# Redis Configuration for Pub/Sub
+# Redis Configuration for Streams
 REDIS_HOST = config('REDIS_HOST', default='localhost')
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_DB = config('REDIS_DB', default=0, cast=int)
-REDIS_CHANNEL = config('REDIS_CHANNEL', default='user_created')
+REDIS_STREAM_USERS = config('REDIS_STREAM_USERS', default='journies:stream:users')
 
 # JWT Public Paths (configurable for microservices)
 JWT_PUBLIC_PATHS = [

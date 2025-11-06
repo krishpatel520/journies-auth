@@ -7,8 +7,8 @@ logger = logger_object('redis_client')
 
 
 class RedisClient:
-    """Redis client for publishing events to pub/sub channels"""
-    
+    """Redis client for publishing events to Redis Streams"""
+
     def __init__(self):
         """Initialize Redis connection"""
         try:
@@ -26,25 +26,37 @@ class RedisClient:
         except Exception as e:
             logger.error(f"Redis connection failed: {str(e)}")
             self.client = None
-    
-    def publish_event(self, channel: str, data: dict):
+
+    def publish_event(self, stream_name: str, data: dict, operation: str = "create"):
         """
-        Publish event to Redis channel
-        
+        Publish event to Redis Stream (persistent)
+
         Args:
-            channel: Redis channel name
+            stream_name: Redis stream name (e.g., 'journies:stream:users')
             data: Dictionary containing event data
+            operation: Operation type - 'create', 'update', or 'delete'
         """
         if not self.client:
             logger.warning("Redis not available, skipping publish")
             return
-        
+
         try:
-            message = json.dumps(data)
-            self.client.publish(channel, message)
-            logger.info(f"Published to {channel}: {data}")
+            # Add operation and status fields for tracking
+            data['operation'] = operation
+            data['status'] = 'pending'
+
+            # Convert all boolean values to strings (Redis only accepts strings, ints, floats, bytes)
+            for key, value in data.items():
+                if isinstance(value, bool):
+                    data[key] = str(value)
+
+            # Add event to stream (XADD)
+            event_id = self.client.xadd(stream_name, data)
+            logger.info(f"Published {operation} event to stream {stream_name} with ID {event_id}: {data}")
+            return event_id
         except Exception as e:
-            logger.error(f"Error publishing to Redis: {str(e)}")
+            logger.error(f"Error publishing to Redis stream: {str(e)}")
+            return None
 
 
 # Global Redis client instance
