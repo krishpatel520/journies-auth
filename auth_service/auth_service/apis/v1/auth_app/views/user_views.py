@@ -20,6 +20,7 @@ from auth_service.utils.redis_client import redis_client
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from datetime import datetime
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +252,15 @@ class UserViewSet(viewsets.ModelViewSet):
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
             
-            # Custom authentication for frontend-hashed passwords
+            # Decrypt frontend password and authenticate
+            from auth_service.utils.password_utils import decrypt_frontend_password
+            
+            # Decrypt the AES-encrypted password
+            plain_password = decrypt_frontend_password(password)
+            if not plain_password:
+                logger.warning(f"Invalid password format for email: {email}")
+                return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+            
             try:
                 user = UserModel.objects.get(email=email)
                 
@@ -260,8 +269,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.warning(f"Login attempt for locked account: {email}")
                     return Response({'error': 'Account temporarily locked due to multiple failed attempts'}, status=status.HTTP_423_LOCKED)
                 
-                # Verify password using Django's secure verification
-                if user.check_password(password):  # bcrypt verification
+                # Verify decrypted password using Django's secure verification
+                if user.check_password(plain_password):  # bcrypt verification
                     # Authentication successful - reset failed attempts
                     user.reset_failed_attempts()
                 else:
@@ -430,27 +439,37 @@ class UserViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Validation failed', 'details': serializer.errors}, status=400)
             
             data = serializer.validated_data
-            logger.info(f"Signup attempt for tenant: {data['tenant_code']}, email: {data['email']}")
+            logger.info(f"Signup attempt for email: {data['email']}")
             
             # Check uniqueness
-            if Tenant.objects.filter(code=data['tenant_code']).exists():
-                logger.warning(f"Signup failed - tenant code already exists: {data['tenant_code']}")
-                return Response({'error': 'Tenant code already exists'}, status=400)
-            
             if UserModel.objects.filter(email=data['email']).exists():
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
-                return Response({'error': 'Email already exists'}, status=400)
+                return Response({
+                    'error': 'Validation failed',
+                    'details': {
+                        'email': ['Email already exists']
+                    }
+                }, status=400)
             
             # Check phone number uniqueness if provided
             phone_number = data.get('phone_number')
-            if phone_number and UserModel.objects.filter(phone_number=phone_number).exists():
-                logger.warning(f"Signup failed - phone number already exists: {phone_number}")
-                return Response({'error': 'Phone number already exists'}, status=400)
+            if phone_number:
+                # Clean phone number for comparison
+                cleaned_phone = re.sub(r'[\s\-\(\)\+]', '', phone_number)
+                if UserModel.objects.filter(phone_number=phone_number).exists():
+                    logger.warning(f"Signup failed - phone number already exists: {phone_number}")
+                    return Response({
+                        'error': 'Validation failed',
+                        'details': {
+                            'phone_number': ['Phone number already exists']
+                        }
+                    }, status=400)
             
             with transaction.atomic():
+                # Create tenant with null name/code (To-do: will be updated later in compass)
                 tenant = Tenant.objects.create(
-                    name=data['tenant_name'],
-                    code=data['tenant_code'],
+                    name=None,
+                    code=None,
                     status='active'
                 )
                 
@@ -465,6 +484,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     first_name=first_name,
                     last_name=last_name,
                     full_name=full_name,
+                    phone_number=phone_number,
                     is_superuser=True,
                     is_active=False  # Inactive until email verified
                 )
@@ -492,7 +512,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     "is_active": user.is_active
                 })
 
-                logger.info(f"Successful signup for tenant: {tenant.code}, user: {user.email}")
+                logger.info(f"Successful signup for user: {user.email}, tenant_id: {tenant.id}")
                 
                 if email_sent:
                     return Response({
