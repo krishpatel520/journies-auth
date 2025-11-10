@@ -94,6 +94,9 @@ class UserModel(AbstractUser):
     locked_until = models.DateTimeField(null=True, blank=True)
     last_failed_login = models.DateTimeField(null=True, blank=True)
     
+    # Terms and Conditions
+    terms_accepted = models.BooleanField(default=False)
+    
     objects = UserModelManager()
     
     USERNAME_FIELD = 'email'

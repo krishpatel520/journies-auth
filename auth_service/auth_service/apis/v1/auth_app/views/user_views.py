@@ -486,7 +486,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     full_name=full_name,
                     phone_number=phone_number,
                     is_superuser=True,
-                    is_active=False  # Inactive until email verified
+                    is_active=False,  # Inactive until email verified
+                    terms_accepted=data['terms_accepted']
                 )
                 
                 user.set_password(data['password'])  # Apply bcrypt hashing

@@ -115,6 +115,7 @@ class SignupSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100, required=False)
     last_name = serializers.CharField(max_length=100, required=False)
     phone_number = serializers.CharField(max_length=20, required=False)
+    terms_accepted = serializers.BooleanField()
     
     def validate_email(self, value):
         """Validate email format more strictly"""
@@ -190,4 +191,10 @@ class SignupSerializer(serializers.Serializer):
             # Check uniqueness
             if UserModel.objects.filter(phone_number=value).exists():
                 raise serializers.ValidationError("Phone number already exists")
+        return value
+    
+    def validate_terms_accepted(self, value):
+        """Validate that terms and conditions are accepted"""
+        if not value:
+            raise serializers.ValidationError("You must accept the terms and conditions to continue")
         return value
