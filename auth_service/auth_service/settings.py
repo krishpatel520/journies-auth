@@ -126,26 +126,12 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
+# Static files (minimal for API service)
 STATIC_URL = '/auth/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
-
-# Ensure static files are served in development
-STATICFILES_FINDERS = [
-    'django.contrib.staticfiles.finders.FileSystemFinder',
-    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-]
-
-# WhiteNoise configuration for production
+# Only for admin/swagger UI static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-WHITENOISE_USE_FINDERS = True
-WHITENOISE_AUTOREFRESH = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -181,6 +167,9 @@ JWT_PRIVATE_KEY_PATH = config('JWT_PRIVATE_KEY_PATH')
 JWT_PUBLIC_KEY_PATH = config('JWT_PUBLIC_KEY_PATH')
 JWT_ISSUER = config('JWT_ISSUER')
 JWT_ALGORITHM = config('JWT_ALGORITHM')
+
+# Password Encryption Key (same as frontend)
+PASSWORD_CRYPT_KEY = config('PASSWORD_CRYPT_KEY')
 
 # USE_X_FORWARDED_HOST = True  # Disabled for static files
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Disabled for static files

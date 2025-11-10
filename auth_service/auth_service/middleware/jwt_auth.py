@@ -7,7 +7,12 @@ logger = logging.getLogger(__name__)
 def JWTAuthenticationMiddleware(get_response):
     """JWT Authentication Middleware for protected endpoints"""
     def middleware(request):
-        # Public paths that don't need authentication (without prefix)
+        from django.conf import settings
+        
+        # Get the base route from settings (for nginx proxy)
+        base_route = getattr(settings, 'FORCE_SCRIPT_NAME', '')
+        
+        # Public paths that don't need authentication
         public_paths = [
             '/api/v1/users/login/',
             '/api/v1/users/signup/',
@@ -28,10 +33,18 @@ def JWTAuthenticationMiddleware(get_response):
             '/admin/'
         ]
         
+        # Add base route prefix to public paths if configured
+        if base_route:
+            public_paths = [base_route + path for path in public_paths] + public_paths
+        
         # Paths that need JWT authentication but have custom handling
         protected_paths = [
             '/api/v1/users/'  # User CRUD operations need JWT
         ]
+        
+        # Add base route prefix to protected paths if configured
+        if base_route:
+            protected_paths = [base_route + path for path in protected_paths] + protected_paths
         
         # Skip auth for public paths
         for path in public_paths:
