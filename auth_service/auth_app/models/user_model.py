@@ -12,8 +12,8 @@ from auth_service.utils.auth_utils import generate_jwt
 class Tenant(models.Model):
     """Tenants table"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    code = models.TextField(unique=True)
-    name = models.TextField()
+    code = models.TextField(unique=True, null=True, blank=True)
+    name = models.TextField(null=True, blank=True)
     status = models.TextField(default='active')
     plan = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -70,7 +70,7 @@ class UserModel(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     full_name = models.TextField(null=True, blank=True)
-    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    phone_number = models.CharField(max_length=20, null=True, blank=True, unique=True)
     is_superuser = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

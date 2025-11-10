@@ -43,6 +43,26 @@ class Migration(migrations.Migration):
             name='password_reset_token',
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
+        migrations.AddField(
+            model_name='usermodel',
+            name='date_joined',
+            field=models.DateTimeField(default=django.utils.timezone.now, verbose_name='date joined'),
+        ),
+        migrations.AddField(
+            model_name='usermodel',
+            name='groups',
+            field=models.ManyToManyField(blank=True, help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.', related_name='user_set', related_query_name='user', to='auth.group', verbose_name='groups'),
+        ),
+        migrations.AddField(
+            model_name='usermodel',
+            name='is_staff',
+            field=models.BooleanField(default=False, help_text='Designates whether the user can log into this admin site.', verbose_name='staff status'),
+        ),
+        migrations.AddField(
+            model_name='usermodel',
+            name='user_permissions',
+            field=models.ManyToManyField(blank=True, help_text='Specific permissions for this user.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions'),
+        ),
         migrations.AlterField(
             model_name='usermodel',
             name='last_login',
