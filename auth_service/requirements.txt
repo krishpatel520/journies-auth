@@ -53,3 +53,6 @@ django-ratelimit>=4.1.0
 
 # Redis client for pub/sub messaging
 redis>=5.0.0
+
+# AES encryption/decryption for password handling
+pycryptodome==3.19.0
