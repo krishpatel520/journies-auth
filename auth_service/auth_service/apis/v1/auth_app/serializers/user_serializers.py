@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
+from auth_service.utils.password_utils import decrypt_frontend_password
 import re
 import logging
 
@@ -18,10 +19,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
     
     def validate_password(self, value):
-        """Validate frontend-hashed password (SHA256)"""
-        if not value or len(value) != 64:  # SHA256 produces 64-char hex string
-            raise serializers.ValidationError("Invalid password hash format")
-        return value
+        """Validate AES-encrypted password from frontend"""
+        if not value:
+            raise serializers.ValidationError("Password is required")
+        
+        # Decrypt the password
+        plain_password = decrypt_frontend_password(value)
+        if not plain_password:
+            raise serializers.ValidationError("Invalid password format")
+        
+        # Return decrypted password for bcrypt hashing
+        return plain_password
     
     def validate_phone_number(self, value):
         """Validate phone number format - exactly 10 digits"""
@@ -41,10 +49,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         last_name = validated_data.get('last_name', '')
         validated_data['full_name'] = f"{first_name} {last_name}".strip()
         
-        # Apply server-side bcrypt hashing to frontend hash
-        frontend_hash = validated_data.pop('password')
+        # Apply server-side bcrypt hashing to decrypted password
+        plain_password = validated_data.pop('password')
         user = UserModel.objects.create(**validated_data)
-        user.set_password(frontend_hash)  # Apply bcrypt to frontend hash
+        user.set_password(plain_password)  # Apply bcrypt to plain password
         user.save()
         return user
 
@@ -57,10 +65,17 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         extra_kwargs = {'password': {'write_only': True}}
     
     def validate_password(self, value):
-        """Validate frontend-hashed password (SHA256)"""
-        if not value or len(value) != 64:  # SHA256 produces 64-char hex string
-            raise serializers.ValidationError("Invalid password hash format")
-        return value
+        """Validate AES-encrypted password from frontend"""
+        if not value:
+            raise serializers.ValidationError("Password is required")
+        
+        # Decrypt the password
+        plain_password = decrypt_frontend_password(value)
+        if not plain_password:
+            raise serializers.ValidationError("Invalid password format")
+        
+        # Return decrypted password for bcrypt hashing
+        return plain_password
     
     def validate_phone_number(self, value):
         """Validate phone number format - exactly 10 digits"""
@@ -84,7 +99,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         
         password = validated_data.pop('password', None)
         if password:
-            instance.set_password(password)  # Apply bcrypt to frontend hash
+            instance.set_password(password)  # Apply bcrypt to decrypted password
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -94,10 +109,9 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return UserSerializer(instance).data
 
 class SignupSerializer(serializers.Serializer):
-    tenant_name = serializers.CharField(max_length=100)
-    tenant_code = serializers.CharField(max_length=50)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
     first_name = serializers.CharField(max_length=100, required=False)
     last_name = serializers.CharField(max_length=100, required=False)
     phone_number = serializers.CharField(max_length=20, required=False)
@@ -109,10 +123,57 @@ class SignupSerializer(serializers.Serializer):
         return value
     
     def validate_password(self, value):
-        """Validate frontend-hashed password (SHA256)"""
-        if not value or len(value) != 64:  # SHA256 produces 64-char hex string
-            raise serializers.ValidationError("Invalid password hash format")
-        return value
+        """Validate AES-encrypted password from frontend with strength requirements"""
+        if not value:
+            raise serializers.ValidationError("Password is required")
+        
+        # Decrypt the password
+        plain_password = decrypt_frontend_password(value)
+        if not plain_password:
+            raise serializers.ValidationError("Invalid password format")
+        
+        # Password strength validation
+        if len(plain_password) < 8:
+            raise serializers.ValidationError("Password must be at least 8 characters long")
+        
+        if not re.search(r'[a-z]', plain_password):
+            raise serializers.ValidationError("Password must contain at least one lowercase letter")
+        
+        if not re.search(r'[A-Z]', plain_password):
+            raise serializers.ValidationError("Password must contain at least one uppercase letter")
+        
+        if not re.search(r'\d', plain_password):
+            raise serializers.ValidationError("Password must contain at least one number")
+        
+        if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', plain_password):
+            raise serializers.ValidationError("Password must contain at least one special character")
+        
+        # Return decrypted password for bcrypt hashing
+        return plain_password
+    
+    def validate_confirm_password(self, value):
+        """Validate AES-encrypted confirm password from frontend"""
+        if not value:
+            raise serializers.ValidationError("Confirm password is required")
+        
+        # Decrypt the confirm password
+        plain_confirm_password = decrypt_frontend_password(value)
+        if not plain_confirm_password:
+            raise serializers.ValidationError("Invalid confirm password format")
+        
+        return plain_confirm_password
+    
+    def validate(self, attrs):
+        """Cross-field validation for password matching"""
+        password = attrs.get('password')
+        confirm_password = attrs.get('confirm_password')
+        
+        if password and confirm_password and password != confirm_password:
+            raise serializers.ValidationError({
+                'confirm_password': 'Passwords do not match'
+            })
+        
+        return attrs
     
     def validate_phone_number(self, value):
         """Validate phone number format and uniqueness"""
