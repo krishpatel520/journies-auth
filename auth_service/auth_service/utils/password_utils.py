@@ -1,41 +1,57 @@
-"""Password encryption/decryption utilities"""
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import base64
 from django.conf import settings
-import hashlib
 import logging
 
 logger = logging.getLogger(__name__)
 
 def decrypt_frontend_password(encrypted_password):
-    """Decrypt AES-encrypted password from frontend"""
+    """Decrypt AES-encrypted password from frontend using fixed IV (SALT)."""
     try:
+        # Step 1: Get and parse the encryption key
         crypt_key = getattr(settings, 'PASSWORD_CRYPT_KEY', '')
         if not crypt_key:
             raise ValueError("PASSWORD_CRYPT_KEY not configured")
-        
-        # CryptoJS uses UTF-8 key directly, padded to 32 bytes
-        key_bytes = crypt_key.encode('utf-8')
-        key_bytes = key_bytes.ljust(32, b'\0')[:32]
-        
-        # Decode base64
+
+        try:
+            key_bytes = bytes.fromhex(crypt_key)
+        except ValueError:
+            raise ValueError("PASSWORD_CRYPT_KEY must be a valid hex string")
+
+        if len(key_bytes) not in (16, 32):
+            raise ValueError("PASSWORD_CRYPT_KEY must decode to 16 or 32 bytes")
+
+        # Step 2: Decode the base64 encrypted password
         encrypted_data = base64.b64decode(encrypted_password)
-        
-        # CryptoJS default uses CBC mode with random IV
-        # IV is first 16 bytes, ciphertext is the rest
-        if len(encrypted_data) < 16:
-            raise ValueError("Invalid encrypted data length")
-            
-        iv = encrypted_data[:16]
-        ciphertext = encrypted_data[16:]
-        
-        # Decrypt
+
+        # Step 3: Use fixed IV from SALT
+        salt_hex = getattr(settings, 'SALT', None)
+        if not salt_hex:
+            raise ValueError("SALT must be configured for fixed IV mode")
+
+        try:
+            iv = bytes.fromhex(salt_hex)
+        except Exception:
+            raise ValueError("SALT must be a valid hex string")
+
+        if len(iv) != 16:
+            raise ValueError("SALT must decode to 16 bytes")
+
+        ciphertext = encrypted_data
+
+        # Step 4: Decrypt the ciphertext
         cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
-        decrypted = unpad(cipher.decrypt(ciphertext), AES.block_size)
-        
-        return decrypted.decode('utf-8')
-        
+
+        decrypted = cipher.decrypt(ciphertext)
+
+        # Step 5: Unpad and decode
+        unpadded = unpad(decrypted, AES.block_size)
+
+        decoded = unpadded.decode('utf-8')
+
+        return decoded
+
     except Exception as e:
         logger.error(f"Password decryption failed: {e}")
         return None
