@@ -212,7 +212,7 @@ class UserModel(AbstractUser):
         from django.conf import settings
         
         token = self.generate_password_reset_token()
-        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost/login')
         reset_url = f"{base_url}/reset-password?token={token}"
         
         send_mail(

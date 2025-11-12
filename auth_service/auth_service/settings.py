@@ -249,3 +249,11 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 COMPASS_SERVICE_URL = config('COMPASS_SERVICE_URL', default='http://localhost:3001')
+
+
+# Password Encryption Configuration
+PASSWORD_CRYPT_KEY = config('PASSWORD_CRYPT_KEY')
+SALT = config('SALT')
+
+
+
