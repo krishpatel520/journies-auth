@@ -64,17 +64,30 @@ class UserModelManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class UserModel(AbstractUser):
-    """Users table with tenant isolation"""
+    """Auth-focused user model - shared table with Compass
+    
+    Multi-service single-table pattern:
+    - Auth Service owns: email, password, is_active, auth tokens, brute force protection
+    - Compass Service owns: first_name, last_name, full_name, phone_number
+    - Shared: is_deleted, deleted_at, tenant_id
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     username = None
     email = models.EmailField(unique=True)
-    full_name = models.TextField(null=True, blank=True)
-    phone_number = models.CharField(max_length=20, null=True, blank=True, unique=True)
-    is_superuser = models.BooleanField(default=False)
+    
+    # Auth Service Fields Only
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(null=True, blank=True)
+    
+    # Compass Service Fields (read-only for Auth)
+    first_name = models.CharField(max_length=100, null=False, blank=False)
+    last_name = models.CharField(max_length=100, null=False, blank=False)
+    full_name = models.TextField(null=True, blank=True)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    
+    # Soft delete (shared)
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     deleted_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='deleted_users')
@@ -106,14 +119,27 @@ class UserModel(AbstractUser):
         db_table = 'journies_usermodel'
         ordering = ['-created_at']
     
+    def save(self, *args, **kwargs):
+        """Restrict Auth service to only update auth-related fields"""
+        if not kwargs.get('update_fields'):
+            # Define fields Auth service is allowed to update
+            auth_fields = [
+                'tenant_id', 'email', 'password', 'is_active', 'last_login',
+                'is_email_verified', 'email_verification_token', 'email_verification_sent_at',
+                'password_reset_token', 'password_reset_sent_at',
+                'failed_login_attempts', 'locked_until', 'last_failed_login',
+                'terms_accepted', 'is_deleted', 'deleted_at'
+            ]
+            kwargs['update_fields'] = auth_fields
+        super().save(*args, **kwargs)
+    
     def generate_jwt_token(self):
         """Generate JWT token"""
         access_token = generate_jwt(
             user_id=str(self.id),
             email=self.email,
             tenant_id=str(self.tenant_id),
-            tenant_code=self.tenant.code,
-            is_superuser=self.is_superuser
+            tenant_code=self.tenant.code
         )
         
         refresh_token = RefreshToken.objects.create(user=self)
@@ -125,12 +151,11 @@ class UserModel(AbstractUser):
             'expires_in': 3600
         }
     
-    def soft_delete(self, deleted_by=None):
-        """Soft delete user"""
+    def soft_delete(self):
+        """Soft delete user - Auth service only updates auth fields"""
         self.is_deleted = True
         self.deleted_at = timezone.now()
-        self.deleted_by = deleted_by
-        self.save()
+        self.save(update_fields=['is_deleted', 'deleted_at'])
     
     def is_locked(self):
         """Check if account is locked due to failed attempts"""
@@ -147,28 +172,25 @@ class UserModel(AbstractUser):
         if self.failed_login_attempts >= 5:
             self.locked_until = timezone.now() + timedelta(minutes=15)
         
-        self.save()
+        self.save(update_fields=['failed_login_attempts', 'locked_until', 'last_failed_login'])
     
     def reset_failed_attempts(self):
         """Reset failed attempts on successful login"""
         self.failed_login_attempts = 0
         self.locked_until = None
         self.last_failed_login = None
-        self.save()
+        self.save(update_fields=['failed_login_attempts', 'locked_until', 'last_failed_login'])
     
     def generate_verification_token(self):
         """Generate email verification token"""
         import secrets
         self.email_verification_token = secrets.token_urlsafe(32)
         self.email_verification_sent_at = timezone.now()
-        self.save()
+        self.save(update_fields=['email_verification_token', 'email_verification_sent_at'])
         return self.email_verification_token
     
     def send_verification_email(self, request=None):
         """Send verification email"""
-        # TODO: Replace with HTML email template with proper branding
-        # TODO: Add email delivery monitoring and retry logic
-        # TODO: Implement rate limiting for email sending
         from django.core.mail import send_mail
         from django.conf import settings
         
@@ -191,7 +213,7 @@ class UserModel(AbstractUser):
             if self.email_verification_sent_at and (timezone.now() - self.email_verification_sent_at).total_seconds() < 86400:
                 self.is_email_verified = True
                 self.email_verification_token = None
-                self.save()
+                self.save(update_fields=['is_email_verified', 'email_verification_token'])
                 return True
         return False
     
@@ -200,14 +222,14 @@ class UserModel(AbstractUser):
         import secrets
         self.password_reset_token = secrets.token_urlsafe(32)
         self.password_reset_sent_at = timezone.now()
-        self.save()
+        self.save(update_fields=['password_reset_token', 'password_reset_sent_at'])
         return self.password_reset_token
     
     def send_password_reset_email(self, request=None):
         """Send password reset email"""
         # TODO: Replace with HTML email template with proper branding
         # TODO: Add email delivery monitoring and retry logic
-        # TODO: Implement rate limiting for password reset emails
+        # TODO: Implement rate limiting for email sending
         from django.core.mail import send_mail
         from django.conf import settings
         
@@ -226,7 +248,6 @@ class UserModel(AbstractUser):
     def verify_password_reset_token(self, token):
         """Verify password reset token"""
         if self.password_reset_token == token:
-            # Check if token is not expired (1 hour)
             if self.password_reset_sent_at and (timezone.now() - self.password_reset_sent_at).total_seconds() < 3600:
                 return True
         return False
@@ -237,27 +258,16 @@ class UserModel(AbstractUser):
             self.set_password(new_password)
             self.password_reset_token = None
             self.password_reset_sent_at = None
-            self.save()
+            self.save(update_fields=['password', 'password_reset_token', 'password_reset_sent_at'])
             
             # Revoke all refresh tokens
             RefreshToken.objects.filter(user=self, is_revoked=False).update(is_revoked=True)
             return True
         return False
     
-    def log_activity(self, action, request=None, status='success', payload=None):
-        """Log user activity"""
-        AuditLog.log_action(
-            action=action,
-            user=self,
-            tenant=self.tenant,
-            resource='user',
-            status=status,
-            payload=payload,
-            request=request
-        )
-    
     def __str__(self):
         return self.email
+
 
 class RefreshToken(models.Model):
     """Refresh tokens for JWT token refresh"""
@@ -283,6 +293,7 @@ class RefreshToken(models.Model):
         self.is_revoked = True
         self.save()
 
+
 class TokenBlacklist(models.Model):
     """Store blacklisted tokens for immediate revocation"""
     user_id = models.UUIDField(db_index=True)
@@ -307,6 +318,7 @@ class TokenBlacklist(models.Model):
             user_id=user_id,
             revoked_at__gte=token_issued_at
         ).exists()
+
 
 class AuditLog(models.Model):
     """Audit logs for security and compliance"""
@@ -352,4 +364,3 @@ class AuditLog(models.Model):
             status=status,
             payload=payload or {}
         )
-
