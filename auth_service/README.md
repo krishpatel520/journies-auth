@@ -2,20 +2,25 @@
 
 ## 🚀 Setup Instructions
 
-1. Create virtual environment 
+1. Update .env file
+
+2. Collect Static files in staticfiles folder
+   `python manage.py collectstatic`
+   
+3. Create virtual environment 
    `python -m venv venv`
    
-2. Activate the virtual environment
- `venv\Scripts\activate`
+4. Activate the virtual environment
+   `venv\Scripts\activate`
 
-2. Install dependencies 
+5. Install dependencies 
    `pip install -r requirements.txt`
 
-3. Run migrations 
+6. Run migrations 
    `python manage.py migrate`
 
-4. Start development server
-   `python manage.py runserver`
+7. Start development server
+   `python manage.py`
 
 ## 🧱 Apps Included
 - auth_app
@@ -30,11 +35,16 @@
    `uv init`
 
 3. Sync the latest libraries added
-`uv add -r requirements.txt`
+   `uv add -r requirements.txt`
 
-4. Run migrations 
+4. Update .env file
+
+5. Collect Static files in staticfiles folder
+   `python manage.py collectstatic`
+
+6. Run migrations 
    `uv run manage.py migrate`
 
-5. Start development server
-   `uv run manage.py runserver` 
+7. Start development server
+   `uv run manage.py` 
 

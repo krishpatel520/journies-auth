@@ -742,6 +742,21 @@ class UserViewSet(viewsets.ModelViewSet):
                 if not user.is_active:
                     return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
                 
+                # Check if reset email was sent recently (within 5 minutes)
+                if user.password_reset_sent_at:
+                    time_since_last_reset = timezone.now() - user.password_reset_sent_at
+                    if time_since_last_reset.total_seconds() < 300:  # 5 minutes
+                        remaining_time = 300 - int(time_since_last_reset.total_seconds())
+                        minutes = remaining_time // 60
+                        seconds = remaining_time % 60
+                        if minutes > 0:
+                            time_str = f"{minutes} minute{'s' if minutes != 1 else ''} and {seconds} second{'s' if seconds != 1 else ''}"
+                        else:
+                            time_str = f"{seconds} second{'s' if seconds != 1 else ''}"
+                        return Response({
+                            'message': f"Password reset link already sent. Please check your email or try again in {time_str}."
+                        })
+                
                 user.send_password_reset_email(request)
                 logger.info(f"Password reset email sent to: {email}")
                 return Response({'message': "We've sent a password reset link to your email. Please check your inbox or spam folder."})
@@ -768,6 +783,7 @@ class UserViewSet(viewsets.ModelViewSet):
             
             token = serializer.validated_data['token']
             new_password = serializer.validated_data['new_password']
+            confirm_password = serializer.validated_data['confirm_password']
             
             try:
                 user = UserModel.objects.get(password_reset_token=token, is_deleted=False)
@@ -776,7 +792,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 if user.check_password(new_password):
                     return Response({'error': 'This password was used recently. Please choose a new one.'}, status=400)
                 
-                if user.reset_password_with_token(token, new_password):
+                if user.reset_password_with_token(token, new_password, confirm_password):
                     logger.info(f"Password reset successful for user: {user.email}")
                     return Response({'message': 'Your password has been reset successfully. Please sign in with your new password.'})
                 else:
