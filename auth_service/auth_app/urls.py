@@ -15,4 +15,3 @@ urlpatterns = [
 ]
 
 logger.info("auth_app URL patterns loaded")
-

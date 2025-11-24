@@ -66,8 +66,8 @@ def load_public_key():
         logger.error(f"Failed to load public key: {e}")
         raise
 
-def generate_jwt(user_id, email, tenant_id, tenant_code, is_superuser=False):
-    """Generate JWT with tenant info"""
+def generate_jwt(user_id, email, tenant_id, is_superuser=False, role_id=None, is_onboarding_complete=False, is_plan_purchased=False):
+    """Generate JWT with tenant info and role"""
     try:
         with open(settings.JWT_PRIVATE_KEY_PATH, "r") as f:
             private_key = f.read()
@@ -76,15 +76,19 @@ def generate_jwt(user_id, email, tenant_id, tenant_code, is_superuser=False):
             "sub": str(user_id),
             "email": email,
             "tid": str(tenant_id),
-            "tenant_code": tenant_code,
             "is_superuser": is_superuser,
+            "is_onboarding_complete": is_onboarding_complete,
+            "is_plan_purchased": is_plan_purchased,
             "iat": datetime.now(timezone.utc),
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iss": settings.JWT_ISSUER,
         }
         
+        if role_id:
+            payload["role_id"] = role_id
+        
         token = jwt.encode(payload, private_key, algorithm=settings.JWT_ALGORITHM)
-        logger.info(f"JWT generated for user {email} in tenant {tenant_code}")
+        logger.info(f"JWT generated for user {email} in tenant {tenant_id}")
         return token
     except Exception as e:
         logger.error(f"Failed to generate JWT for user {email}: {e}")

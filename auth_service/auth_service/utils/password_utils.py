@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def decrypt_frontend_password(encrypted_password):
-    """Decrypt AES-encrypted password from frontend using fixed IV (SALT)."""
+    """Decrypt AES-encrypted password from frontend."""
     try:
         # Step 1: Get and parse the encryption key
         crypt_key = getattr(settings, 'PASSWORD_CRYPT_KEY', '')
@@ -24,34 +24,36 @@ def decrypt_frontend_password(encrypted_password):
 
         # Step 2: Decode the base64 encrypted password
         encrypted_data = base64.b64decode(encrypted_password)
+        logger.info(f"Encrypted data length: {len(encrypted_data)}, hex: {encrypted_data.hex()}")
 
-        # Step 3: Use fixed IV from SALT
-        salt_hex = getattr(settings, 'SALT', None)
-        if not salt_hex:
-            raise ValueError("SALT must be configured for fixed IV mode")
-
-        try:
+        # Step 3: Extract IV and ciphertext (first 16 bytes = IV, rest = ciphertext)
+        if len(encrypted_data) < 32:
+            # Data is too short - likely just ciphertext, use fixed IV
+            salt_hex = getattr(settings, 'SALT', None)
+            if not salt_hex:
+                raise ValueError("SALT not configured")
             iv = bytes.fromhex(salt_hex)
-        except Exception:
-            raise ValueError("SALT must be a valid hex string")
-
-        if len(iv) != 16:
-            raise ValueError("SALT must decode to 16 bytes")
-
-        ciphertext = encrypted_data
+            ciphertext = encrypted_data
+            logger.info(f"Using fixed IV, ciphertext length: {len(ciphertext)}")
+        else:
+            iv = encrypted_data[:16]
+            ciphertext = encrypted_data[16:]
+            logger.info(f"Extracted IV and ciphertext, ciphertext length: {len(ciphertext)}")
 
         # Step 4: Decrypt the ciphertext
         cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
-
         decrypted = cipher.decrypt(ciphertext)
 
         # Step 5: Unpad and decode
-        unpadded = unpad(decrypted, AES.block_size)
+        try:
+            unpadded = unpad(decrypted, AES.block_size)
+        except ValueError:
+            unpadded = decrypted
 
         decoded = unpadded.decode('utf-8')
-
+        logger.info(f"Decryption successful: {decoded}")
         return decoded
 
     except Exception as e:
-        logger.error(f"Password decryption failed: {e}")
+        logger.error(f"Password decryption failed: {e}", exc_info=True)
         return None
