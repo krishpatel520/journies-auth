@@ -58,7 +58,7 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://127.0.0.1:
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
-print(SECURE_SSL_REDIRECT)
+# print(SECURE_SSL_REDIRECT)
 ROOT_URLCONF = 'auth_service.urls'
 
 TEMPLATES = [

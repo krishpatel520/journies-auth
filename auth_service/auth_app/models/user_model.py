@@ -15,7 +15,7 @@ class Tenant(models.Model):
     code = models.TextField(unique=True, null=True, blank=True)
     name = models.TextField(null=True, blank=True)
     status = models.TextField(default='active')
-    plan = models.TextField(null=True, blank=True)
+    # plan = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(default=dict)
     
@@ -68,7 +68,7 @@ class UserModel(AbstractUser):
     
     Multi-service single-table pattern:
     - Auth Service owns: email, password, is_active, auth tokens, brute force protection
-    - Compass Service owns: first_name, last_name, full_name, phone_number
+    - Compass Service owns: first_name, last_name, full_name, phone_number, role_id
     - Shared: is_deleted, deleted_at, tenant_id
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
@@ -77,7 +77,7 @@ class UserModel(AbstractUser):
     email = models.EmailField(unique=True)
     
     # Auth Service Fields Only
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, help_text="Account active/suspended status")
     created_at = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(null=True, blank=True)
     
@@ -86,6 +86,11 @@ class UserModel(AbstractUser):
     last_name = models.CharField(max_length=100, null=False, blank=False)
     full_name = models.TextField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
+    role_id = models.UUIDField(null=True, blank=True, help_text="Role ID from Compass service")
+    
+    # Onboarding & Plan Status
+    is_onboarding_complete = models.BooleanField(default=False, help_text="All onboarding steps completed")
+    is_plan_purchased = models.BooleanField(default=False, help_text="User has active subscription plan")
     
     # Soft delete (shared)
     is_deleted = models.BooleanField(default=False)
@@ -120,17 +125,7 @@ class UserModel(AbstractUser):
         ordering = ['-created_at']
     
     def save(self, *args, **kwargs):
-        """Restrict Auth service to only update auth-related fields"""
-        if not kwargs.get('update_fields'):
-            # Define fields Auth service is allowed to update
-            auth_fields = [
-                'tenant_id', 'email', 'password', 'is_active', 'last_login',
-                'is_email_verified', 'email_verification_token', 'email_verification_sent_at',
-                'password_reset_token', 'password_reset_sent_at',
-                'failed_login_attempts', 'locked_until', 'last_failed_login',
-                'terms_accepted', 'is_deleted', 'deleted_at'
-            ]
-            kwargs['update_fields'] = auth_fields
+        """Save user - field restrictions enforced at serializer/API level"""
         super().save(*args, **kwargs)
     
     def generate_jwt_token(self):
@@ -139,7 +134,10 @@ class UserModel(AbstractUser):
             user_id=str(self.id),
             email=self.email,
             tenant_id=str(self.tenant_id),
-            tenant_code=self.tenant.code
+            is_superuser=self.is_superuser,
+            role_id=str(self.role_id) if self.role_id else None,
+            is_onboarding_complete=self.is_onboarding_complete,
+            is_plan_purchased=self.is_plan_purchased
         )
         
         refresh_token = RefreshToken.objects.create(user=self)
@@ -207,14 +205,13 @@ class UserModel(AbstractUser):
         )
     
     def verify_email(self, token):
-        """Verify email with token"""
+        """Verify email with token - reusable until first verification, no expiry"""
         if self.email_verification_token == token and not self.is_email_verified:
-            # Check if token is not expired (24 hours)
-            if self.email_verification_sent_at and (timezone.now() - self.email_verification_sent_at).total_seconds() < 86400:
-                self.is_email_verified = True
-                self.email_verification_token = None
-                self.save(update_fields=['is_email_verified', 'email_verification_token'])
-                return True
+            
+            self.is_email_verified = True
+            self.email_verification_token = None
+            self.save(update_fields=['is_email_verified', 'email_verification_token'])
+            return True
         return False
     
     def generate_password_reset_token(self):
@@ -227,9 +224,6 @@ class UserModel(AbstractUser):
     
     def send_password_reset_email(self, request=None):
         """Send password reset email"""
-        # TODO: Replace with HTML email template with proper branding
-        # TODO: Add email delivery monitoring and retry logic
-        # TODO: Implement rate limiting for email sending
         from django.core.mail import send_mail
         from django.conf import settings
         

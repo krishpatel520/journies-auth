@@ -2,24 +2,19 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from django.contrib.auth import authenticate
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
 import logging
 
 from auth_app.models.user_model import UserModel, RefreshToken
-from auth_service.apis.v1.auth_app.serializers.user_serializers import UserSerializer, UserCreateSerializer, UserUpdateSerializer, SignupSerializer
+from auth_service.apis.v1.auth_app.serializers.user_serializers import UserSerializer, SignupSerializer
 from auth_service.apis.v1.auth_app.serializers.auth_serializers import (
-    LoginSerializer, TokenVerifySerializer, EmailVerificationSerializer,
-    ResendVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
-    CheckVerificationStatusSerializer
+    LoginSerializer, EmailVerificationSerializer, ForgotPasswordSerializer, ResetPasswordSerializer,
 )
 from auth_service.utils.auth_utils import validate_jwt
 from auth_service.utils.redis_client import redis_client
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from datetime import datetime
 import re
 
 logger = logging.getLogger(__name__)
@@ -28,19 +23,27 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = UserModel.objects.all()
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
-    authentication_classes = []  # Disable DRF authentication
+    authentication_classes = []
     
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return UserCreateSerializer
-        elif self.action in ['update', 'partial_update']:
-            return UserUpdateSerializer
-        return UserSerializer
+    @swagger_auto_schema(auto_schema=None)
+    def list(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
     
-    def get_permissions(self):
-        if self.action in ['create', 'login', 'verify_token']:
-            return [AllowAny()]
-        return [AllowAny()]  # For now, will add JWT middleware later
+    @swagger_auto_schema(auto_schema=None)
+    def create(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    @swagger_auto_schema(auto_schema=None)
+    def update(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    @swagger_auto_schema(auto_schema=None)
+    def partial_update(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    @swagger_auto_schema(auto_schema=None)
+    def destroy(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
     
     def retrieve(self, request, *args, **kwargs):
         """Get single user with proper error handling"""
@@ -50,188 +53,6 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         except UserModel.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    def update(self, request, *args, **kwargs):
-        """Update user with proper error handling"""
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=False)
-            if serializer.is_valid():
-                # Set updated_by if user is authenticated
-                if hasattr(request, 'jwt_payload') and request.jwt_payload:
-                    try:
-                        updated_by = UserModel.objects.get(id=request.jwt_payload['sub'])
-                        instance.updated_by = updated_by
-                    except UserModel.DoesNotExist:
-                        pass
-                serializer.save()
-
-                # Publish update event to Redis Stream
-                try:
-                    redis_client.publish_event(
-                        settings.REDIS_STREAM_USERS,
-                        {
-                            "tenant_id": str(instance.tenant.id),
-                            "user_id": str(instance.id),
-                            "email": instance.email,
-                            "first_name": instance.first_name,
-                            "last_name": instance.last_name,
-                            "full_name": instance.full_name,
-                            "is_superuser": instance.is_superuser,
-                            "is_active": instance.is_active
-                        },
-                        operation="update"
-                    )
-                except Exception as e:
-                    logger.error(f"Error publishing update event to Redis: {str(e)}")
-
-                return Response(serializer.data)
-            return Response({'error': 'Invalid input'}, status=status.HTTP_400_BAD_REQUEST)
-        except UserModel.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    def partial_update(self, request, *args, **kwargs):
-        """Partial update user with proper error handling"""
-        try:
-            instance = self.get_object()
-            serializer = self.get_serializer(instance, data=request.data, partial=True)
-            if serializer.is_valid():
-                # Set updated_by if user is authenticated
-                if hasattr(request, 'jwt_payload') and request.jwt_payload:
-                    try:
-                        updated_by = UserModel.objects.get(id=request.jwt_payload['sub'])
-                        instance.updated_by = updated_by
-                    except UserModel.DoesNotExist:
-                        pass
-                serializer.save()
-
-                # Publish update event to Redis Stream
-                try:
-                    redis_client.publish_event(
-                        settings.REDIS_STREAM_USERS,
-                        {
-                            "tenant_id": str(instance.tenant.id),
-                            "user_id": str(instance.id),
-                            "email": instance.email,
-                            "first_name": instance.first_name,
-                            "last_name": instance.last_name,
-                            "full_name": instance.full_name,
-                            "is_superuser": instance.is_superuser,
-                            "is_active": instance.is_active
-                        },
-                        operation="update"
-                    )
-                except Exception as e:
-                    logger.error(f"Error publishing update event to Redis: {str(e)}")
-
-                return Response(serializer.data)
-            return Response({'error': 'Invalid input'}, status=status.HTTP_400_BAD_REQUEST)
-        except UserModel.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    def destroy(self, request, *args, **kwargs):
-        """Soft delete user with proper error handling"""
-        try:
-            instance = self.get_object()
-            # Get the user who is deleting (from JWT token)
-            deleted_by = None
-            if hasattr(request, 'jwt_payload') and request.jwt_payload:
-                try:
-                    deleted_by = UserModel.objects.get(id=request.jwt_payload['sub'])
-                except UserModel.DoesNotExist:
-                    pass
-
-            instance.soft_delete(deleted_by=deleted_by)
-
-            # Publish delete event to Redis Stream
-            try:
-                redis_client.publish_event(
-                    settings.REDIS_STREAM_USERS,
-                    {
-                        "tenant_id": str(instance.tenant.id),
-                        "user_id": str(instance.id)
-                    },
-                    operation="delete"
-                )
-            except Exception as e:
-                logger.error(f"Error publishing delete event to Redis: {str(e)}")
-
-            return Response({'message': 'User deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
-        except UserModel.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    def create(self, request, *args, **kwargs):
-        try:
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
-                # Check if email already exists
-                email = serializer.validated_data.get('email')
-                if UserModel.objects.filter(email=email).exists():
-                    return Response({
-                        'error': 'User creation failed'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Check if phone number already exists
-                phone_number = serializer.validated_data.get('phone_number')
-                if phone_number and UserModel.objects.filter(phone_number=phone_number).exists():
-                    return Response({
-                        'error': 'Phone number already exists'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Get tenant from JWT token
-                logger.debug(f"Request user type: {type(request.user)}, value: {request.user}")
-                
-                # Try jwt_user first, then user
-                jwt_payload = None
-                if hasattr(request, 'jwt_user') and isinstance(request.jwt_user, dict):
-                    jwt_payload = request.jwt_user
-                elif hasattr(request, 'user') and isinstance(request.user, dict):
-                    jwt_payload = request.user
-                
-                if jwt_payload:
-                    tenant_id = jwt_payload.get('tid')
-                    logger.debug(f"Extracted tenant_id: {tenant_id}")
-                    if tenant_id:
-                        from auth_app.models.user_model import Tenant
-                        try:
-                            tenant = Tenant.objects.get(id=tenant_id)
-                            user = serializer.save(tenant=tenant)
-                            logger.info(f"User created successfully: {user.email} in tenant: {tenant.code}")
-
-                            # Publish user creation event to Redis Stream
-                            redis_client.publish_event(settings.REDIS_STREAM_USERS, {
-                                "tenant_id": str(tenant.id),
-                                "user_id": str(user.id),
-                                "email": user.email,
-                                "first_name": user.first_name,
-                                "last_name": user.last_name,
-                                "full_name": user.full_name,
-                                "is_superuser": user.is_superuser,
-                                "is_active": user.is_active
-                            })
-                        except Tenant.DoesNotExist:
-                            logger.error(f"Tenant not found: {tenant_id}")
-                            return Response({'error': 'Invalid tenant'}, status=400)
-                    else:
-                        logger.error("No tenant ID in JWT token")
-                        return Response({'error': 'No tenant in token'}, status=400)
-                else:
-                    logger.error(f"Authentication failed - user type: {type(getattr(request, 'user', None))}")
-                    return Response({'error': 'Authentication required'}, status=401)
-                
-                return Response({
-                    'message': 'User created successfully',
-                    'user_id': user.id,
-                    'email': user.email
-                }, status=status.HTTP_201_CREATED)
-            else:
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"User creation error: {e}")
-            return Response({
-                'error': 'User creation failed',
-                'details': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -252,10 +73,8 @@ class UserViewSet(viewsets.ModelViewSet):
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
             
-            # Decrypt frontend password and authenticate
             from auth_service.utils.password_utils import decrypt_frontend_password
             
-            # Decrypt the AES-encrypted password
             plain_password = decrypt_frontend_password(password)
             if not plain_password:
                 logger.warning(f"Invalid password format for email: {email}")
@@ -264,28 +83,23 @@ class UserViewSet(viewsets.ModelViewSet):
             try:
                 user = UserModel.objects.get(email=email)
                 
-                # Check if account is locked
                 if user.is_locked():
                     logger.warning(f"Login attempt for locked account: {email}")
                     return Response({'error': 'Account temporarily locked due to multiple failed attempts'}, status=status.HTTP_423_LOCKED)
                 
-                # Verify decrypted password using Django's secure verification
-                if user.check_password(plain_password):  # bcrypt verification
-                    # Authentication successful - reset failed attempts
+                if user.check_password(plain_password):
                     user.reset_failed_attempts()
                 else:
-                    # Wrong password - increment failed attempts
                     user.increment_failed_attempts()
                     user = None
             except UserModel.DoesNotExist:
-                user = None  # User not found
+                user = None
             
             if user:
                 if user.is_deleted:
                     logger.warning(f"Login attempt for deleted user: {email}")
                     return Response({'error': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
                 if not user.is_active:
-                    # Check if user needs email verification
                     if not user.is_email_verified:
                         logger.warning(f"Login attempt for unverified user: {email}")
                         return Response({
@@ -304,13 +118,12 @@ class UserViewSet(viewsets.ModelViewSet):
                     'message': 'Login successful'
                 })
             else:
-                # Failed login - check if we need to increment attempts for existing user
                 try:
                     failed_user = UserModel.objects.get(email=email)
-                    if not failed_user.is_locked():  # Only increment if not already locked
+                    if not failed_user.is_locked():
                         failed_user.increment_failed_attempts()
                 except UserModel.DoesNotExist:
-                    pass  # User doesn't exist, no need to track attempts
+                    pass
             
             logger.warning(f"Failed login attempt for email: {email}")
             return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -354,7 +167,6 @@ class UserViewSet(viewsets.ModelViewSet):
             payload = validate_jwt(token)
             
             if payload:
-                # Check if user still exists and is active
                 try:
                     user = UserModel.objects.get(id=payload['sub'])
                     if user.is_deleted:
@@ -369,8 +181,10 @@ class UserViewSet(viewsets.ModelViewSet):
                     'sub': payload['sub'],
                     'email': payload['email'],
                     'tid': payload['tid'],
-                    'tenant_code': payload['tenant_code'],
                     'is_superuser': payload['is_superuser'],
+                    'is_onboarding_complete': payload.get('is_onboarding_complete', False),
+                    'is_plan_purchased': payload.get('is_plan_purchased', False),
+                    'role_id': payload.get('role_id'),
                     'is_active': user.is_active,
                     'exp': payload['exp']
                 })
@@ -395,7 +209,6 @@ class UserViewSet(viewsets.ModelViewSet):
             if not refresh_token:
                 return Response({'error': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Find and validate refresh token
             try:
                 token_obj = RefreshToken.objects.get(token=refresh_token, is_revoked=False)
             except RefreshToken.DoesNotExist:
@@ -405,12 +218,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 token_obj.revoke()
                 return Response({'error': 'Refresh token expired'}, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Generate new tokens
             user = token_obj.user
             if not user.is_active or user.is_deleted:
                 return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
             
-            # Revoke old refresh token and create new one
             token_obj.revoke()
             new_token_data = user.generate_jwt_token()
             
@@ -441,7 +252,6 @@ class UserViewSet(viewsets.ModelViewSet):
             data = serializer.validated_data
             logger.info(f"Signup attempt for email: {data['email']}")
             
-            # Check uniqueness
             if UserModel.objects.filter(email=data['email']).exists():
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
                 return Response({
@@ -451,10 +261,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     }
                 }, status=400)
             
-            # Check phone number uniqueness if provided
             phone_number = data.get('phone_number')
             if phone_number:
-                # Clean phone number for comparison
                 cleaned_phone = re.sub(r'[\s\-\(\)\+]', '', phone_number)
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
@@ -466,13 +274,11 @@ class UserViewSet(viewsets.ModelViewSet):
                     }, status=400)
             
             with transaction.atomic():
-                # Create tenant with null name/code (To-do: will be updated later in compass)
                 tenant = Tenant.objects.create(
                     name=None,
                     code=None,
                     status='active'
                 )
-                
                 
                 first_name = data.get('first_name', '')
                 last_name = data.get('last_name', '')
@@ -486,14 +292,13 @@ class UserViewSet(viewsets.ModelViewSet):
                     full_name=full_name,
                     phone_number=phone_number,
                     is_superuser=True,
-                    is_active=False,  # Inactive until email verified
+                    is_active=False,
                     terms_accepted=data['terms_accepted']
                 )
                 
-                user.set_password(data['password'])  # Apply bcrypt hashing
+                user.set_password(data['password'])
                 user.save()
                 
-                # Send verification email
                 try:
                     user.send_verification_email(request)
                     email_sent = True
@@ -501,7 +306,6 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.error(f"Failed to send verification email: {e}")
                     email_sent = False
 
-                # Publish user creation event to Redis Stream
                 redis_client.publish_event(settings.REDIS_STREAM_USERS, {
                     "tenant_id": str(tenant.id),
                     "user_id": str(user.id),
@@ -540,7 +344,7 @@ class UserViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def verify_email(self, request):
-        """Verify email with token and redirect to select plan"""
+        """Verify email with token - reusable until first verification"""
         try:
             serializer = EmailVerificationSerializer(data=request.data)
             if not serializer.is_valid():
@@ -549,25 +353,22 @@ class UserViewSet(viewsets.ModelViewSet):
             token = serializer.validated_data['token']
             
             try:
-                user = UserModel.objects.get(email_verification_token=token, is_email_verified=False)
+                user = UserModel.objects.get(email_verification_token=token)
+                
+                if user.is_email_verified:
+                    return Response({'error': 'Email already verified'}, status=400)
+                
                 if user.verify_email(token):
-                    user.is_active = True  # Activate user after email verification
-                    user.save()
+                    user.is_active = True
+                    user.save(update_fields=['is_active'])
                     
                     logger.info(f"Email verified successfully for user: {user.email}")
                     
-                    # Generate tokens for authenticated session
                     token_data = user.generate_jwt_token()
-                    
-                    # Create auto-login URL for Compass redirect
-                    compass_url = getattr(settings, 'COMPASS_SERVICE_URL', 'http://localhost:3001')
-                    auto_login_url = f"{compass_url}/auto-login?token={token_data['access_token']}&refresh_token={token_data['refresh_token']}"
                     
                     return Response({
                         **token_data,
-                        'message': 'Your email has been verified successfully! Your account is now active.',
-                        'redirect_url': auto_login_url,
-                        'compass_url': compass_url
+                        'message': 'Your email has been verified successfully! Your account is now active.'
                     })
                 else:
                     return Response({'error': 'Invalid or expired verification token'}, status=400)
@@ -578,78 +379,6 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Email verification error: {e}")
             return Response({'error': 'Email verification failed'}, status=500)
-    
-    @swagger_auto_schema(
-        method='post',
-        request_body=ResendVerificationSerializer,
-        responses={200: 'Verification email sent', 400: 'Invalid email or already verified'}
-    )
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def resend_verification(self, request):
-        """Resend email verification"""
-        try:
-            serializer = ResendVerificationSerializer(data=request.data)
-            if not serializer.is_valid():
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
-            
-            email = serializer.validated_data['email']
-            
-            try:
-                user = UserModel.objects.get(email=email, is_email_verified=False)
-                if user.is_active and user.is_email_verified:
-                    return Response({'error': 'Email already verified'}, status=400)
-                
-                try:
-                    user.send_verification_email(request)
-                    logger.info(f"Verification email resent to: {email}")
-                    return Response({'message': 'Verification link resent successfully.'})
-                except Exception as e:
-                    logger.error(f"Failed to resend verification email: {e}")
-                    return Response({'error': 'Unable to resend link. Please check your connection and try again.'}, status=500)
-                
-            except UserModel.DoesNotExist:
-                return Response({'error': 'User not found or email already verified'}, status=400)
-                
-        except Exception as e:
-            logger.error(f"Resend verification error: {e}")
-            return Response({'error': 'Unable to resend link. Please check your connection and try again.'}, status=500)
-    
-    @swagger_auto_schema(
-        method='post',
-        request_body=CheckVerificationStatusSerializer,
-        responses={200: 'Verification status', 400: 'Invalid email'}
-    )
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def check_verification_status(self, request):
-        """Check if user needs email verification"""
-        try:
-            serializer = CheckVerificationStatusSerializer(data=request.data)
-            if not serializer.is_valid():
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
-            
-            email = serializer.validated_data['email']
-            
-            try:
-                user = UserModel.objects.get(email=email, is_deleted=False)
-                
-                if user.is_email_verified and user.is_active:
-                    return Response({
-                        'verified': True,
-                        'message': 'Email already verified'
-                    })
-                else:
-                    return Response({
-                        'verified': False,
-                        'message': 'Please check your email to verify your account.',
-                        'resend_available': True
-                    })
-                    
-            except UserModel.DoesNotExist:
-                return Response({'error': 'User not found'}, status=404)
-                
-        except Exception as e:
-            logger.error(f"Check verification status error: {e}")
-            return Response({'error': "We're having trouble right now. Please refresh or try again later."}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -697,16 +426,13 @@ class UserViewSet(viewsets.ModelViewSet):
                     from auth_app.models.user_model import TokenBlacklist
                     user = UserModel.objects.get(id=user_id)
                     
-                    # Check if user has any active refresh tokens
                     active_tokens = RefreshToken.objects.filter(user=user, is_revoked=False)
                     if not active_tokens.exists():
                         logger.warning(f"Logout attempt for already logged out user: {user_email}")
                         return Response({'error': 'User is already logged out'}, status=400)
                     
-                    # Revoke all active refresh tokens
                     active_tokens.update(is_revoked=True)
                     
-                    # Add user to blacklist for immediate access token revocation
                     TokenBlacklist.revoke_user_tokens(user_id, reason='logout')
                     
                     logger.info(f"Successful logout for user: {user_email}")
@@ -742,10 +468,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 if not user.is_active:
                     return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
                 
-                # Check if reset email was sent recently (within 5 minutes)
                 if user.password_reset_sent_at:
                     time_since_last_reset = timezone.now() - user.password_reset_sent_at
-                    if time_since_last_reset.total_seconds() < 300:  # 5 minutes
+                    if time_since_last_reset.total_seconds() < 300:
                         remaining_time = 300 - int(time_since_last_reset.total_seconds())
                         minutes = remaining_time // 60
                         seconds = remaining_time % 60
@@ -788,7 +513,6 @@ class UserViewSet(viewsets.ModelViewSet):
             try:
                 user = UserModel.objects.get(password_reset_token=token, is_deleted=False)
                 
-                # Check if user is trying to reuse old password
                 if user.check_password(new_password):
                     return Response({'error': 'This password was used recently. Please choose a new one.'}, status=400)
                 
@@ -804,111 +528,6 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Reset password error: {e}")
             return Response({'error': 'Password reset failed'}, status=500)
-    
-    # @swagger_auto_schema(
-    #     method='post',
-    #     request_body=openapi.Schema(
-    #         type=openapi.TYPE_OBJECT,
-    #         properties={
-    #             'email': openapi.Schema(type=openapi.TYPE_STRING),
-    #             'new_password': openapi.Schema(type=openapi.TYPE_STRING)
-    #         },
-    #         required=['email', 'new_password']
-    #     ),
-    #     responses={200: 'Password reset successful', 400: 'Validation error', 404: 'User not found'}
-    # )
-    # @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    # def reset_password(self, request):
-    #     """Reset password with frontend-hashed password"""
-    #     try:
-    #         email = request.data.get('email')
-    #         new_password = request.data.get('new_password')
-            
-    #         if not email or not new_password:
-    #             return Response({'error': 'Email and new password are required'}, status=400)
-            
-    #         try:
-    #             user = UserModel.objects.get(email=email)
-    #             if user.is_deleted or not user.is_active:
-    #                 return Response({'error': 'User not found'}, status=404)
-                
-    #             # Store frontend hash directly
-    #             user.password = new_password
-    #             user.save()
-                
-    #             # Revoke all refresh tokens
-    #             RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
-                
-    #             logger.info(f"Password reset successful for user: {email}")
-    #             return Response({'message': 'Password reset successful'})
-                
-    #         except UserModel.DoesNotExist:
-    #             return Response({'error': 'User not found'}, status=404)
-                
-    #     except Exception as e:
-    #         logger.error(f"Password reset error: {e}")
-    #         return Response({'error': 'Password reset failed'}, status=500)
-    
-    @swagger_auto_schema(
-        method='post',
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'token': openapi.Schema(type=openapi.TYPE_STRING),
-                'refresh_token': openapi.Schema(type=openapi.TYPE_STRING)
-            },
-            required=['token']
-        ),
-        responses={200: 'Auto-login successful', 400: 'Invalid token', 401: 'Token expired'}
-    )
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def auto_login(self, request):
-        """Auto-login endpoint for post-verification redirect to Compass"""
-        try:
-            token = request.data.get('token')
-            refresh_token = request.data.get('refresh_token')
-            
-            if not token:
-                return Response({'error': 'Token is required'}, status=400)
-            
-            # Validate the access token
-            payload = validate_jwt(token)
-            if not payload:
-                return Response({'error': 'Invalid or expired token'}, status=401)
-            
-            # Get user details
-            try:
-                user = UserModel.objects.get(id=payload['sub'])
-                if not user.is_active or user.is_deleted:
-                    return Response({'error': 'User account is inactive'}, status=401)
-                
-                # Return user data for Compass to establish session
-                return Response({
-                    'message': 'Auto-login successful',
-                    'user': {
-                        'id': str(user.id),
-                        'email': user.email,
-                        'first_name': user.first_name,
-                        'last_name': user.last_name,
-                        'full_name': user.full_name,
-                        'is_superuser': user.is_superuser,
-                        'tenant_id': str(user.tenant_id),
-                        'tenant_code': user.tenant.code
-                    },
-                    'tokens': {
-                        'access_token': token,
-                        'refresh_token': refresh_token,
-                        'token_type': 'Bearer',
-                        'expires_in': 3600
-                    }
-                })
-                
-            except UserModel.DoesNotExist:
-                return Response({'error': 'User not found'}, status=404)
-                
-        except Exception as e:
-            logger.error(f"Auto-login error: {e}")
-            return Response({'error': 'Auto-login failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -936,10 +555,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 from auth_app.models.user_model import TokenBlacklist
                 user = UserModel.objects.get(id=user_id)
                 
-                # Revoke refresh tokens
                 RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
-                
-                # Add to blacklist for access token revocation
                 TokenBlacklist.revoke_user_tokens(user_id, reason=reason)
                 
                 logger.info(f"Tokens revoked for user: {user.email}, reason: {reason}")
@@ -951,6 +567,7 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Token revocation error: {e}")
             return Response({'error': 'Token revocation failed'}, status=500)
+    
     
     @swagger_auto_schema(
         method='post',
@@ -998,15 +615,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 if user.is_deleted or not user.is_active:
                     return Response({'error': 'User account is inactive'}, status=401)
                 
-                # Verify current password using bcrypt
                 if not user.check_password(current_password):
                     return Response({'error': 'Current password is incorrect'}, status=401)
                 
-                # Update to new password with bcrypt hashing
                 user.set_password(new_password)
                 user.save()
                 
-                # Revoke all refresh tokens to force re-login
                 RefreshToken.objects.filter(user=user, is_revoked=False).update(is_revoked=True)
                 
                 logger.info(f"Password changed successfully for user: {user.email}")

@@ -13,7 +13,7 @@ class ServiceAuditLogger:
     
     # Auth Service owned fields
     AUTH_OWNED_FIELDS = {
-        'email', 'password', 'is_owner', 'is_active', 'last_login',
+        'email', 'password','is_active', 'veryfy_email', 'last_login',
         'is_email_verified', 'email_verification_token', 'email_verification_sent_at',
         'password_reset_token', 'password_reset_sent_at',
         'failed_login_attempts', 'locked_until', 'last_failed_login',
