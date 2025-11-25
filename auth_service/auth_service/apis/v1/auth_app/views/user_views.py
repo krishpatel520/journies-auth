@@ -298,24 +298,13 @@ class UserViewSet(viewsets.ModelViewSet):
                 
                 user.set_password(data['password'])
                 user.save()
-                
+
                 try:
                     user.send_verification_email(request)
                     email_sent = True
                 except Exception as e:
                     logger.error(f"Failed to send verification email: {e}")
                     email_sent = False
-
-                redis_client.publish_event(settings.REDIS_STREAM_USERS, {
-                    "tenant_id": str(tenant.id),
-                    "user_id": str(user.id),
-                    "email": user.email,
-                    "first_name": user.first_name,
-                    "last_name": user.last_name,
-                    "full_name": full_name,
-                    "is_superuser": user.is_superuser,
-                    "is_active": user.is_active
-                })
 
                 logger.info(f"Successful signup for user: {user.email}, tenant_id: {tenant.id}")
                 
@@ -361,11 +350,34 @@ class UserViewSet(viewsets.ModelViewSet):
                 if user.verify_email(token):
                     user.is_active = True
                     user.save(update_fields=['is_active'])
-                    
+
                     logger.info(f"Email verified successfully for user: {user.email}")
-                    
+
+                    # Publish event to Redis after email verification
+                    try:
+                        redis_client.publish_event(
+                            settings.REDIS_STREAM_USERS,
+                            {
+                                "tenant_id": str(user.tenant.id),
+                                "user_id": str(user.id),
+                                "email": user.email,
+                                "first_name": user.first_name,
+                                "last_name": user.last_name,
+                                "full_name": user.full_name,
+                                "is_superuser": user.is_superuser,
+                                "is_active": user.is_active,
+                                "role_id": getattr(user, 'role_id', None),
+                                "is_onboarding_complete": getattr(user, 'is_onboarding_complete', False),
+                                "is_plan_purchased": getattr(user, 'is_plan_purchased', False)
+                            },
+                            operation="create"
+                        )
+                        logger.info(f"Published user verification event to Redis for user: {user.email}")
+                    except Exception as e:
+                        logger.error(f"Failed to publish user verification event to Redis: {e}")
+
                     token_data = user.generate_jwt_token()
-                    
+
                     return Response({
                         **token_data,
                         'message': 'Your email has been verified successfully! Your account is now active.'
