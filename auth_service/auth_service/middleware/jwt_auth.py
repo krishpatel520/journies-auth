@@ -33,18 +33,11 @@ def JWTAuthenticationMiddleware(get_response):
             '/admin/'
         ]
         
-        # Add base route prefix to public paths if configured
-        if base_route:
-            public_paths = [base_route + path for path in public_paths] + public_paths
         
         # Paths that need JWT authentication but have custom handling
         protected_paths = [
             '/api/v1/users/'  # User CRUD operations need JWT
         ]
-        
-        # Add base route prefix to protected paths if configured
-        if base_route:
-            protected_paths = [base_route + path for path in protected_paths] + protected_paths
         
         # Skip auth for public paths
         for path in public_paths:
@@ -59,9 +52,7 @@ def JWTAuthenticationMiddleware(get_response):
                 needs_jwt = True
                 break
         
-        # If not a known protected path, require JWT for all other endpoints
-        if not needs_jwt:
-            needs_jwt = True
+        
         
         if needs_jwt:
             # Require JWT for protected endpoints
