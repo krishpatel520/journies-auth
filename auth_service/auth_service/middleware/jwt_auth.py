@@ -19,11 +19,10 @@ def JWTAuthenticationMiddleware(get_response):
             '/api/v1/users/verify_token/',
             '/api/v1/users/refresh_token/',
             '/api/v1/users/verify_email/',
-            '/api/v1/users/resend_verification/',
-            '/api/v1/users/check_verification_status/',
+            # '/api/v1/users/resend_verification/',
+            # '/api/v1/users/check_verification_status/',
             '/api/v1/users/forgot_password/',
             '/api/v1/users/reset_password/',
-            '/api/v1/users/auto_login/',
             '/api/v1/users/revoke_tokens/',
             '/.well-known/jwks.json',
             '/health/',
@@ -33,18 +32,11 @@ def JWTAuthenticationMiddleware(get_response):
             '/admin/'
         ]
         
-        # Add base route prefix to public paths if configured
-        if base_route:
-            public_paths = [base_route + path for path in public_paths] + public_paths
         
         # Paths that need JWT authentication but have custom handling
         protected_paths = [
             '/api/v1/users/'  # User CRUD operations need JWT
         ]
-        
-        # Add base route prefix to protected paths if configured
-        if base_route:
-            protected_paths = [base_route + path for path in protected_paths] + protected_paths
         
         # Skip auth for public paths
         for path in public_paths:
@@ -59,9 +51,7 @@ def JWTAuthenticationMiddleware(get_response):
                 needs_jwt = True
                 break
         
-        # If not a known protected path, require JWT for all other endpoints
-        if not needs_jwt:
-            needs_jwt = True
+        
         
         if needs_jwt:
             # Require JWT for protected endpoints

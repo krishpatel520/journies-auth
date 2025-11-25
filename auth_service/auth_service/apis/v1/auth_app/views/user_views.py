@@ -263,7 +263,6 @@ class UserViewSet(viewsets.ModelViewSet):
             
             phone_number = data.get('phone_number')
             if phone_number:
-                cleaned_phone = re.sub(r'[\s\-\(\)\+]', '', phone_number)
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
                     return Response({
@@ -284,7 +283,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 last_name = data.get('last_name', '')
                 full_name = f"{first_name} {last_name}".strip()
                 
-                user = UserModel.objects.create(
+                user = UserModel(
                     tenant=tenant,
                     email=data['email'],
                     first_name=first_name,
@@ -295,7 +294,6 @@ class UserViewSet(viewsets.ModelViewSet):
                     is_active=False,
                     terms_accepted=data['terms_accepted']
                 )
-                
                 user.set_password(data['password'])
                 user.save()
                 
@@ -348,12 +346,15 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             serializer = EmailVerificationSerializer(data=request.data)
             if not serializer.is_valid():
+                logger.warning(f"Email verification serializer validation failed: {serializer.errors}")
                 return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
             
             token = serializer.validated_data['token']
+            logger.info(f"Attempting to verify email with token: {token[:20]}...")
             
             try:
                 user = UserModel.objects.get(email_verification_token=token)
+                logger.info(f"Found user with token: {user.email}, is_email_verified: {user.is_email_verified}")
                 
                 if user.is_email_verified:
                     return Response({'error': 'Email already verified'}, status=400)
@@ -371,13 +372,15 @@ class UserViewSet(viewsets.ModelViewSet):
                         'message': 'Your email has been verified successfully! Your account is now active.'
                     })
                 else:
+                    logger.warning(f"verify_email method returned False for user: {user.email}")
                     return Response({'error': 'Invalid or expired verification token'}, status=400)
                     
             except UserModel.DoesNotExist:
+                logger.warning(f"No user found with verification token: {token[:20]}...")
                 return Response({'error': 'Invalid verification token'}, status=400)
                 
         except Exception as e:
-            logger.error(f"Email verification error: {e}")
+            logger.error(f"Email verification error: {e}", exc_info=True)
             return Response({'error': 'Email verification failed'}, status=500)
     
     @swagger_auto_schema(
