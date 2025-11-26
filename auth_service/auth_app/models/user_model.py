@@ -86,11 +86,14 @@ class UserModel(AbstractUser):
     last_name = models.CharField(max_length=100, null=False, blank=False)
     full_name = models.TextField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
-    role_id = models.UUIDField(null=True, blank=True, help_text="Role ID from Compass service")
+    role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
+    invited_by_id = models.UUIDField(null=True, blank=True)
     
     # Onboarding & Plan Status
     is_onboarding_complete = models.BooleanField(default=False, help_text="All onboarding steps completed")
     is_plan_purchased = models.BooleanField(default=False, help_text="User has active subscription plan")
+    status = models.CharField(max_length=20, default='pending', help_text="User status: pending, active, suspended")
+
     
     # Soft delete (shared)
     is_deleted = models.BooleanField(default=False)
@@ -129,13 +132,13 @@ class UserModel(AbstractUser):
         super().save(*args, **kwargs)
     
     def generate_jwt_token(self):
-        """Generate JWT token"""
+        """Generate JWT token with role_id from database"""
         access_token = generate_jwt(
             user_id=str(self.id),
             email=self.email,
             tenant_id=str(self.tenant_id),
             is_superuser=self.is_superuser,
-            role_id=str(self.role_id) if self.role_id else None,
+            role_id=self.role_id,
             is_onboarding_complete=self.is_onboarding_complete,
             is_plan_purchased=self.is_plan_purchased
         )
@@ -182,9 +185,12 @@ class UserModel(AbstractUser):
     def generate_verification_token(self):
         """Generate email verification token"""
         import secrets
+        import logging
+        logger = logging.getLogger(__name__)
         self.email_verification_token = secrets.token_urlsafe(32)
         self.email_verification_sent_at = timezone.now()
         self.save(update_fields=['email_verification_token', 'email_verification_sent_at'])
+        logger.info(f"Generated verification token for {self.email}: {self.email_verification_token}")
         return self.email_verification_token
     
     def send_verification_email(self, request=None):

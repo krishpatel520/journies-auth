@@ -283,6 +283,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 last_name = data.get('last_name', '')
                 full_name = f"{first_name} {last_name}".strip()
                 
+                from auth_service.constants import ROLE_OWNER
+                
                 user = UserModel(
                     tenant=tenant,
                     email=data['email'],
@@ -290,6 +292,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     last_name=last_name,
                     full_name=full_name,
                     phone_number=phone_number,
+                    role_id=ROLE_OWNER,
                     is_superuser=True,
                     is_active=False,
                     terms_accepted=data['terms_accepted']
