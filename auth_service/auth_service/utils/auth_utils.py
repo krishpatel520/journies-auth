@@ -85,7 +85,7 @@ def generate_jwt(user_id, email, tenant_id, is_superuser=False, role_id=None, is
         }
         
         if role_id:
-            payload["role_id"] = role_id
+            payload["role_id"] = int(role_id)
         
         token = jwt.encode(payload, private_key, algorithm=settings.JWT_ALGORITHM)
         logger.info(f"JWT generated for user {email} in tenant {tenant_id}")
