@@ -49,6 +49,8 @@ class RedisClient:
             for key, value in data.items():
                 if isinstance(value, bool):
                     data[key] = str(value)
+                elif value is None:
+                    data[key] = ""
 
             # Add event to stream (XADD)
             event_id = self.client.xadd(stream_name, data)
