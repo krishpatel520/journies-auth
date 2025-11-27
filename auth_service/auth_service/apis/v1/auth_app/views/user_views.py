@@ -254,23 +254,13 @@ class UserViewSet(viewsets.ModelViewSet):
             
             if UserModel.objects.filter(email=data['email']).exists():
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
-                return Response({
-                    'error': 'Validation failed',
-                    'details': {
-                        'email': ['Email already exists']
-                    }
-                }, status=400)
+                return Response({'error': 'Email already exists'}, status=400)
             
             phone_number = data.get('phone_number')
             if phone_number:
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
-                    return Response({
-                        'error': 'Validation failed',
-                        'details': {
-                            'phone_number': ['Phone number already exists']
-                        }
-                    }, status=400)
+                    return Response({'error': 'Phone number already exists'}, status=400)
             
             with transaction.atomic():
                 tenant = Tenant.objects.create(
@@ -295,6 +285,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     role_id=ROLE_OWNER,
                     is_superuser=True,
                     is_active=False,
+                    is_plan_purchased=False,
                     terms_accepted=data['terms_accepted']
                 )
                 user.set_password(data['password'])
