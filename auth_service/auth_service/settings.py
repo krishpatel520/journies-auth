@@ -227,6 +227,7 @@ JWT_PUBLIC_PATHS = [
     '/api/v1/users/signup/',
     '/api/v1/users/verify_token/',
     '/api/v1/users/refresh_token/',
+    '/api/email-files/',
     '/.well-known/jwks.json',
     '/health/',
     '/swagger/',
@@ -254,6 +255,3 @@ COMPASS_SERVICE_URL = config('COMPASS_SERVICE_URL', default='http://localhost:30
 # Password Encryption Configuration
 PASSWORD_CRYPT_KEY = config('PASSWORD_CRYPT_KEY')
 SALT = config('SALT')
-
-
-
