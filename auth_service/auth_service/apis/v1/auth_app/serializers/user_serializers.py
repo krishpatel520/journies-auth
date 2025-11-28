@@ -124,45 +124,16 @@ class SignupSerializer(serializers.Serializer):
         return value
     
     def validate_password(self, value):
-        """Validate AES-encrypted password from frontend with strength requirements"""
+        """Validate password is provided (decryption happens in view)"""
         if not value:
             raise serializers.ValidationError("Password is required")
-        
-        # Decrypt the password
-        plain_password = decrypt_frontend_password(value)
-        if not plain_password:
-            raise serializers.ValidationError("Invalid password format")
-        
-        # Password strength validation
-        if len(plain_password) < 8:
-            raise serializers.ValidationError("Password must be at least 8 characters long")
-        
-        if not re.search(r'[a-z]', plain_password):
-            raise serializers.ValidationError("Password must contain at least one lowercase letter")
-        
-        if not re.search(r'[A-Z]', plain_password):
-            raise serializers.ValidationError("Password must contain at least one uppercase letter")
-        
-        if not re.search(r'\d', plain_password):
-            raise serializers.ValidationError("Password must contain at least one number")
-        
-        if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', plain_password):
-            raise serializers.ValidationError("Password must contain at least one special character")
-        
-        # Return decrypted password for bcrypt hashing
-        return plain_password
+        return value
     
     def validate_confirm_password(self, value):
-        """Validate AES-encrypted confirm password from frontend"""
+        """Validate confirm password is provided (decryption happens in view)"""
         if not value:
             raise serializers.ValidationError("Confirm password is required")
-        
-        # Decrypt the confirm password
-        plain_confirm_password = decrypt_frontend_password(value)
-        if not plain_confirm_password:
-            raise serializers.ValidationError("Invalid confirm password format")
-        
-        return plain_confirm_password
+        return value
     
     def validate(self, attrs):
         """Cross-field validation for password matching"""

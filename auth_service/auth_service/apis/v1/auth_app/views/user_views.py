@@ -244,6 +244,7 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             from auth_app.models.user_model import Tenant
             from django.db import transaction
+            from auth_service.utils.password_utils import decrypt_frontend_password
             
             serializer = SignupSerializer(data=request.data)
             if not serializer.is_valid():
@@ -261,6 +262,29 @@ class UserViewSet(viewsets.ModelViewSet):
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
                     return Response({'error': 'Phone number already exists'}, status=400)
+            
+            # Decrypt password from frontend
+            plain_password = decrypt_frontend_password(data['password'])
+            if not plain_password:
+                logger.warning(f"Signup failed - invalid password format for email: {data['email']}")
+                return Response({'error': 'Invalid password format'}, status=400)
+            
+            # Validate password strength
+            if len(plain_password) < 8:
+                return Response({'error': 'Password must be at least 8 characters long'}, status=400)
+            if not re.search(r'[a-z]', plain_password):
+                return Response({'error': 'Password must contain at least one lowercase letter'}, status=400)
+            if not re.search(r'[A-Z]', plain_password):
+                return Response({'error': 'Password must contain at least one uppercase letter'}, status=400)
+            if not re.search(r'\d', plain_password):
+                return Response({'error': 'Password must contain at least one number'}, status=400)
+            if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', plain_password):
+                return Response({'error': 'Password must contain at least one special character'}, status=400)
+            
+            # Validate confirm password matches
+            plain_confirm = decrypt_frontend_password(data['confirm_password'])
+            if not plain_confirm or plain_password != plain_confirm:
+                return Response({'error': 'Passwords do not match'}, status=400)
             
             with transaction.atomic():
                 tenant = Tenant.objects.create(
@@ -288,7 +312,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     is_plan_purchased=False,
                     terms_accepted=data['terms_accepted']
                 )
-                user.set_password(data['password'])
+                user.set_password(plain_password)
                 user.save()
                 
                 try:
