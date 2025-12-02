@@ -162,6 +162,9 @@ LOGGING = {
 
 FORCE_SCRIPT_NAME = config('BASE_ROUTE')  # Required for nginx proxy
 
+# Frontend URL for invitation links
+FRONTEND_URL = config('FRONTEND_URL', default='http://192.168.71.244/login')
+
 # JWT Configuration
 JWT_PRIVATE_KEY_PATH = config('JWT_PRIVATE_KEY_PATH')
 JWT_PUBLIC_KEY_PATH = config('JWT_PUBLIC_KEY_PATH')

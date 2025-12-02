@@ -82,8 +82,8 @@ class UserModel(AbstractUser):
     last_login = models.DateTimeField(null=True, blank=True)
     
     # Compass Service Fields (read-only for Auth)
-    first_name = models.CharField(max_length=100, null=False, blank=False)
-    last_name = models.CharField(max_length=100, null=False, blank=False)
+    first_name = models.CharField(max_length=100, null=False, blank=True)
+    last_name = models.CharField(max_length=100, null=False, blank=True)
     full_name = models.TextField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
@@ -199,7 +199,7 @@ class UserModel(AbstractUser):
         from django.conf import settings
         
         token = self.generate_verification_token()
-        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         verification_url = f"{base_url}/verify-email?token={token}"
         
         send_mail(
@@ -234,7 +234,7 @@ class UserModel(AbstractUser):
         from django.conf import settings
         
         token = self.generate_password_reset_token()
-        base_url = getattr(settings, 'FRONTEND_URL', 'http://localhost/login')
+        base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         reset_url = f"{base_url}/reset-password?token={token}"
         
         send_mail(
