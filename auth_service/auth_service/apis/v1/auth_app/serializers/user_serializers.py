@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
-from auth_service.utils.password_utils import decrypt_frontend_password
+# from auth_service.utils.password_utils import decrypt_frontend_password
 import re
 import logging
 
@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 # class UserCreateSerializer(serializers.ModelSerializer):
 #     class Meta:

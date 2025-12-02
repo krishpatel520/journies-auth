@@ -368,7 +368,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 
                 if user.verify_email(token):
                     user.is_active = True
-                    user.save(update_fields=['is_active'])
+                    user.status = 'active'
+
+                    user.save(update_fields=['is_active', 'status'])
 
                     logger.info(f"Email verified successfully for user: {user.email}")
 
