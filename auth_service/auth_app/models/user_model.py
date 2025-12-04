@@ -79,6 +79,7 @@ class UserModel(AbstractUser):
     # Auth Service Fields Only
     is_active = models.BooleanField(default=True, help_text="Account active/suspended status")
     created_at = models.DateTimeField(auto_now_add=True)
+    date_joined = models.DateTimeField(default=timezone.now, verbose_name='date joined')
     last_login = models.DateTimeField(null=True, blank=True)
     
     # Compass Service Fields (read-only for Auth)
@@ -88,6 +89,8 @@ class UserModel(AbstractUser):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
     invited_by_id = models.UUIDField(null=True, blank=True)
+    # profile_photo = models.URLField(null=True, blank=True, help_text="User profile photo URL") # Todo: future enhancement
+
     
     # Onboarding & Plan Status
     is_onboarding_complete = models.BooleanField(default=False, help_text="All onboarding steps completed")
@@ -129,6 +132,9 @@ class UserModel(AbstractUser):
     
     def save(self, *args, **kwargs):
         """Save user - field restrictions enforced at serializer/API level"""
+        # Set date_joined for invited users on first save
+        if self.pk is None and self.invited_by_id and not self.is_superuser:
+            self.date_joined = timezone.now()
         super().save(*args, **kwargs)
     
     def generate_jwt_token(self):
