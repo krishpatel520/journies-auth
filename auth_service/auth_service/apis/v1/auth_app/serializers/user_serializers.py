@@ -1,112 +1,73 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
-# from auth_service.utils.password_utils import decrypt_frontend_password
+from django.db import connection
 import re
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 class UserSerializer(serializers.ModelSerializer):
+    # profile_photo = serializers.SerializerMethodField()
+    role_name = serializers.SerializerMethodField()
+    property_name = serializers.SerializerMethodField()
+    invited_by_name = serializers.SerializerMethodField()
+    joining_date = serializers.SerializerMethodField()
+    
     class Meta:
         model = UserModel
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
-# class UserCreateSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = UserModel
-#         fields = ['email', 'password', 'first_name', 'last_name', 'phone_number']
-#         extra_kwargs = {'password': {'write_only': True}}
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 
+                  'created_at', 'role_name', 'property_name', 'invited_by_name', 
+                  'status', 'joining_date']
+        read_only_fields = ['id', 'created_at', 'role_name', 'property_name', 
+                           'invited_by_name', 'joining_date']
     
-#     def validate_password(self, value):
-#         """Validate AES-encrypted password from frontend"""
-#         if not value:
-#             raise serializers.ValidationError("Password is required")
-        
-#         # Decrypt the password
-#         plain_password = decrypt_frontend_password(value)
-#         if not plain_password:
-#             raise serializers.ValidationError("Invalid password format")
-        
-#         # Return decrypted password for bcrypt hashing
-#         return plain_password
+    # def get_profile_photo(self, obj):
+    #     """Return user profile photo or default"""
+    #     if obj.profile_photo:
+    #         return obj.profile_photo
+    #     static_url = getattr(settings, 'STATIC_URL', '/static/')
+    #     return f"{static_url}images/users.png"
     
-#     def validate_phone_number(self, value):
-#         """Validate phone number format - exactly 10 digits"""
-#         if value:
-#             # Remove spaces, dashes, and parentheses for validation
-#             cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
-#             # Check if it contains only digits
-#             if not cleaned.isdigit():
-#                 raise serializers.ValidationError("Please enter numbers only.")
-#             # Check if it's exactly 10 digits
-#             if len(cleaned) != 10:
-#                 raise serializers.ValidationError("Phone number must be exactly 10 digits.")
-#         return value
+    def get_role_name(self, obj):
+        """Get role name from role_id"""
+        if obj.role_id:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT name FROM journies_role WHERE id = %s", [obj.role_id])
+                    row = cursor.fetchone()
+                    return row[0] if row else f"role_{obj.role_id}"
+            except:
+                return f"role_{obj.role_id}"
+        return None
     
-#     def create(self, validated_data):
-#         first_name = validated_data.get('first_name', '')
-#         last_name = validated_data.get('last_name', '')
-#         validated_data['full_name'] = f"{first_name} {last_name}".strip()
-        
-#         # Apply server-side bcrypt hashing to decrypted password
-#         plain_password = validated_data.pop('password')
-#         user = UserModel.objects.create(**validated_data)
-#         user.set_password(plain_password)  # Apply bcrypt to plain password
-#         user.save()
-#         return user
-
-# class UserUpdateSerializer(serializers.ModelSerializer):
-#     password = serializers.CharField(write_only=True, required=False)
+    def get_property_name(self, obj):
+        """Get property name from tenant"""
+        if obj.tenant_id:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT property_name FROM journies_property WHERE tenant_id = %s", [obj.tenant_id])
+                    row = cursor.fetchone()
+                    return row[0] if row else None
+            except:
+                return None
+        return None
     
-#     class Meta:
-#         model = UserModel
-#         fields = ['first_name', 'last_name', 'phone_number', 'password']
-#         extra_kwargs = {'password': {'write_only': True}}
+    def get_invited_by_name(self, obj):
+        """Get name of user who invited this user"""
+        if obj.invited_by_id:
+            try:
+                invited_by_user = UserModel.objects.get(id=obj.invited_by_id)
+                return invited_by_user.full_name or invited_by_user.email
+            except UserModel.DoesNotExist:
+                return None
+        return None
     
-#     def validate_password(self, value):
-#         """Validate AES-encrypted password from frontend"""
-#         if not value:
-#             raise serializers.ValidationError("Password is required")
-        
-#         # Decrypt the password
-#         plain_password = decrypt_frontend_password(value)
-#         if not plain_password:
-#             raise serializers.ValidationError("Invalid password format")
-        
-#         # Return decrypted password for bcrypt hashing
-#         return plain_password
-    
-#     def validate_phone_number(self, value):
-#         """Validate phone number format - exactly 10 digits"""
-#         if value:
-#             # Remove spaces, dashes, and parentheses for validation
-#             cleaned = re.sub(r'[\s\-\(\)\+]', '', value)
-#             # Check if it contains only digits
-#             if not cleaned.isdigit():
-#                 raise serializers.ValidationError("Please enter numbers only.")
-#             # Check if it's exactly 10 digits
-#             if len(cleaned) != 10:
-#                 raise serializers.ValidationError("Phone number must be exactly 10 digits.")
-#         return value
-    
-#     def update(self, instance, validated_data):
-#         # Auto-update full_name if first_name or last_name changed
-#         if 'first_name' in validated_data or 'last_name' in validated_data:
-#             first_name = validated_data.get('first_name', instance.first_name)
-#             last_name = validated_data.get('last_name', instance.last_name)
-#             validated_data['full_name'] = f"{first_name} {last_name}".strip()
-        
-#         password = validated_data.pop('password', None)
-#         if password:
-#             instance.set_password(password)  # Apply bcrypt to decrypted password
-#         for attr, value in validated_data.items():
-#             setattr(instance, attr, value)
-#         instance.save()
-#         return instance
-    
-#     def to_representation(self, instance):
-#         return UserSerializer(instance).data
+    def get_joining_date(self, obj):
+        """Return joining date - null for owner, signup date for invited users"""
+        if obj.is_superuser or not obj.invited_by_id:
+            return None
+        return obj.date_joined
 
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()

@@ -46,7 +46,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
     
     def retrieve(self, request, *args, **kwargs):
-        """Get single user with proper error handling"""
+        """Get single user details"""
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
@@ -240,7 +240,7 @@ class UserViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def signup(self, request):
-        """Create tenant and admin user"""
+        """Create tenant and admin user, or complete invited user signup"""
         try:
             from auth_app.models.user_model import Tenant
             from django.db import transaction
@@ -253,23 +253,22 @@ class UserViewSet(viewsets.ModelViewSet):
             data = serializer.validated_data
             logger.info(f"Signup attempt for email: {data['email']}")
             
-            if UserModel.objects.filter(email=data['email']).exists():
+            existing_user = UserModel.objects.filter(email=data['email']).first()
+            if existing_user and not existing_user.invited_by_id:
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
                 return Response({'error': 'Email already exists'}, status=400)
             
             phone_number = data.get('phone_number')
-            if phone_number:
+            if phone_number and not existing_user:
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
                     return Response({'error': 'Phone number already exists'}, status=400)
             
-            # Decrypt password from frontend
             plain_password = decrypt_frontend_password(data['password'])
             if not plain_password:
                 logger.warning(f"Signup failed - invalid password format for email: {data['email']}")
                 return Response({'error': 'Invalid password format'}, status=400)
             
-            # Validate password strength
             if len(plain_password) < 8:
                 return Response({'error': 'Password must be at least 8 characters long'}, status=400)
             if not re.search(r'[a-z]', plain_password):
@@ -281,39 +280,51 @@ class UserViewSet(viewsets.ModelViewSet):
             if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', plain_password):
                 return Response({'error': 'Password must contain at least one special character'}, status=400)
             
-            # Validate confirm password matches
             plain_confirm = decrypt_frontend_password(data['confirm_password'])
             if not plain_confirm or plain_password != plain_confirm:
                 return Response({'error': 'Passwords do not match'}, status=400)
             
             with transaction.atomic():
-                tenant = Tenant.objects.create(
-                    name=None,
-                    code=None,
-                    status='active'
-                )
-                
-                first_name = data.get('first_name', '')
-                last_name = data.get('last_name', '')
-                full_name = f"{first_name} {last_name}".strip()
-                
-                from auth_service.constants import ROLE_OWNER
-                
-                user = UserModel(
-                    tenant=tenant,
-                    email=data['email'],
-                    first_name=first_name,
-                    last_name=last_name,
-                    full_name=full_name,
-                    phone_number=phone_number,
-                    role_id=ROLE_OWNER,
-                    is_superuser=True,
-                    is_active=False,
-                    is_plan_purchased=False,
-                    terms_accepted=data['terms_accepted']
-                )
-                user.set_password(plain_password)
-                user.save()
+                if existing_user:
+                    user = existing_user
+                    user.first_name = data.get('first_name', '')
+                    user.last_name = data.get('last_name', '')
+                    user.full_name = f"{user.first_name} {user.last_name}".strip()
+                    user.phone_number = phone_number
+                    user.set_password(plain_password)
+                    user.date_joined = timezone.now()
+                    user.terms_accepted = data['terms_accepted']
+                    user.save()
+                    logger.info(f"Invited user completed signup: {user.email}")
+                else:
+                    tenant = Tenant.objects.create(
+                        name=None,
+                        code=None,
+                        status='active'
+                    )
+                    
+                    first_name = data.get('first_name', '')
+                    last_name = data.get('last_name', '')
+                    full_name = f"{first_name} {last_name}".strip()
+                    
+                    from auth_service.constants import ROLE_OWNER
+                    
+                    user = UserModel(
+                        tenant=tenant,
+                        email=data['email'],
+                        first_name=first_name,
+                        last_name=last_name,
+                        full_name=full_name,
+                        phone_number=phone_number,
+                        role_id=ROLE_OWNER,
+                        is_superuser=True,
+                        is_active=False,
+                        is_plan_purchased=False,
+                        terms_accepted=data['terms_accepted']
+                    )
+                    user.set_password(plain_password)
+                    user.save()
+                    logger.info(f"New owner signup: {user.email}, tenant_id: {tenant.id}")
 
                 try:
                     user.send_verification_email(request)
@@ -322,8 +333,6 @@ class UserViewSet(viewsets.ModelViewSet):
                     logger.error(f"Failed to send verification email: {e}")
                     email_sent = False
 
-                logger.info(f"Successful signup for user: {user.email}, tenant_id: {tenant.id}")
-                
                 if email_sent:
                     return Response({
                         'message': "We have sent a verification link to your email.",
@@ -341,7 +350,7 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Signup error: {e}")
             return Response({'error': 'Signup failed', 'details': str(e)}, status=500)
-    
+
     @swagger_auto_schema(
         method='post',
         request_body=EmailVerificationSerializer,

@@ -131,6 +131,9 @@ def validate_jwt(token, use_jwks=False, jwks_url=None):
     except jwt.ExpiredSignatureError:
         logger.warning("JWT token has expired")
         return None
+    except jwt.InvalidIssuerError as e:
+        logger.warning(f"Invalid JWT issuer: {e}. Expected: {settings.JWT_ISSUER}")
+        return None
     except jwt.InvalidTokenError as e:
         logger.warning(f"Invalid JWT token: {e}")
         return None
