@@ -182,8 +182,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     'email': payload['email'],
                     'tid': payload['tid'],
                     'is_superuser': payload['is_superuser'],
-                    'is_onboarding_complete': payload.get('is_onboarding_complete', False),
-                    'is_plan_purchased': payload.get('is_plan_purchased', False),
+                    'is_onboarding_complete': user.is_onboarding_complete,
+                    'is_plan_purchased': user.is_plan_purchased,
                     'role_id': payload.get('role_id'),
                     'is_active': user.is_active,
                     'exp': payload['exp']
