@@ -18,9 +18,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = UserModel
         fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 
                   'created_at', 'role_name', 'property_name', 'invited_by_name', 
-                  'status', 'joining_date']
+                  'status', 'joining_date', 'email_verification_sent_at']
         read_only_fields = ['id', 'created_at', 'role_name', 'property_name', 
-                           'invited_by_name', 'joining_date']
+                           'invited_by_name', 'joining_date', 'email_verification_sent_at']
     
     # def get_profile_photo(self, obj):
     #     """Return user profile photo or default"""
