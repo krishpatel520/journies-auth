@@ -1,9 +1,15 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import timedelta
 import uuid
 from auth_service.utils.auth_utils import generate_jwt
+
+def validate_unique_email(value):
+    """Validate email is unique for non-deleted users only"""
+    if UserModel.objects.filter(email=value, is_deleted=False).exists():
+        raise ValidationError('A user with this email already exists.')
 
 # ============================================================================
 # TENANT MODEL 
@@ -74,7 +80,7 @@ class UserModel(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     username = None
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, validators=[validate_unique_email])
     
     # Auth Service Fields Only
     is_active = models.BooleanField(default=True, help_text="Account active/suspended status")
