@@ -292,7 +292,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.full_name = f"{user.first_name} {user.last_name}".strip()
                     user.phone_number = phone_number
                     user.set_password(plain_password)
-                    user.date_joined = timezone.now()
+                    user.joined_date = timezone.now()
+                    user.is_onboarding_complete = True
                     user.terms_accepted = data['terms_accepted']
                     user.save()
                     logger.info(f"Invited user completed signup: {user.email}")
