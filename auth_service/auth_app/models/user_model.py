@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from datetime import timedelta
 import uuid
 from auth_service.utils.auth_utils import generate_jwt
+from auth_service.utils.email_templates import get_email_html_template
 
 def validate_unique_email(value):
     """Validate email is unique for non-deleted users only"""
@@ -21,7 +22,6 @@ class Tenant(models.Model):
     code = models.TextField(unique=True, null=True, blank=True)
     name = models.TextField(null=True, blank=True)
     status = models.TextField(default='active')
-    # plan = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(default=dict)
     
@@ -95,7 +95,6 @@ class UserModel(AbstractUser):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
     invited_by_id = models.UUIDField(null=True, blank=True)
-    # profile_photo = models.URLField(null=True, blank=True, help_text="User profile photo URL") # Todo: future enhancement
 
     
     # Onboarding & Plan Status
@@ -138,7 +137,6 @@ class UserModel(AbstractUser):
     
     def save(self, *args, **kwargs):
         """Save user - field restrictions enforced at serializer/API level"""
-        # Set date_joined for invited users on first save
         if self.pk is None and self.invited_by_id and not self.is_superuser:
             self.date_joined = timezone.now()
         super().save(*args, **kwargs)
@@ -206,26 +204,61 @@ class UserModel(AbstractUser):
         return self.email_verification_token
     
     def send_verification_email(self, request=None):
-        """Send verification email"""
-        from django.core.mail import send_mail
+        """Send verification email with HTML template"""
+        from django.core.mail import EmailMultiAlternatives
         from django.conf import settings
         
         token = self.generate_verification_token()
         base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         verification_url = f"{base_url}/verify-email?token={token}"
+        logo_url = getattr(settings, 'LOGO_URL', None)
         
-        send_mail(
-            subject='Verify your email address',
-            message=f'Click the link to verify your email: {verification_url}',
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
-            recipient_list=[self.email],
-            fail_silently=False,
+        if self.invited_by_id:
+            # Invited user
+            from auth_app.models.property_model import Property
+            property = Property.objects.get(tenant_id=self.tenant_id)
+            property_name = property.property_name
+            
+            subject = f"Join {property_name} Journey!"
+            text_content = f"You've been invited to join {property_name}'s journey. Please verify your email to continue.\n\n{verification_url}"
+            
+            html_content = get_email_html_template(
+                title=subject,
+                content=text_content,
+                button_text="Verify Email",
+                button_url=verification_url,
+                logo_url=logo_url
+            )
+        else:
+            # Owner signup
+            subject = "Verify your email address"
+            content_html = f'<h1>Welcome to Journies!</h1><p>Please verify your email to continue.</p>'
+            # text_content = """Welcome to Journies!
+            # Please verify your email to continue.
+
+            # """ 
+            # + verification_url
+                        
+            html_content = get_email_html_template(
+                title=subject,
+                content=content_html,
+                button_text="Verify Email",
+                button_url=verification_url,
+                logo_url=logo_url
+            )
+        
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=content_html,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'compass@journies.ai'),
+            to=[self.email]
         )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
     
     def verify_email(self, token):
         """Verify email with token - reusable until first verification, no expiry"""
         if self.email_verification_token == token and not self.is_email_verified:
-            
             self.is_email_verified = True
             self.email_verification_token = None
             self.save(update_fields=['is_email_verified', 'email_verification_token'])
@@ -241,21 +274,36 @@ class UserModel(AbstractUser):
         return self.password_reset_token
     
     def send_password_reset_email(self, request=None):
-        """Send password reset email"""
-        from django.core.mail import send_mail
+        """Send password reset email with HTML template"""
+        from django.core.mail import EmailMultiAlternatives
         from django.conf import settings
         
         token = self.generate_password_reset_token()
         base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         reset_url = f"{base_url}/reset-password?token={token}"
+        logo_url = getattr(settings, 'LOGO_URL', None)
         
-        send_mail(
-            subject='Reset your password',
-            message=f'Click the link to reset your password: {reset_url}',
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
-            recipient_list=[self.email],
-            fail_silently=False,
+        subject = 'Forgot password? Reset now'
+        text_content = f"""Forgot your password? It happens to the best of us.
+To reset your password, click the button below."""
+        
+        html_content = get_email_html_template(
+            title="Forgot your password? It happens to the best of us.<br/><br/>",
+            content="To reset your password, click the button below.",
+            button_text="Reset Password",
+            button_url=reset_url,
+            logo_url=logo_url,
+            # subtitle="To reset your password, click the button below."
         )
+        
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'compass@journies.ai'),
+            to=[self.email]
+        )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
     
     def verify_password_reset_token(self, token):
         """Verify password reset token"""

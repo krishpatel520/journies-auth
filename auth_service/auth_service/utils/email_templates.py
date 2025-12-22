@@ -1,5 +1,14 @@
-def get_email_html_template(title, content, button_text, button_url, logo_url):
-    """Generate HTML email template with consistent styling"""
+def get_email_html_template(title, content, button_text, button_url, logo_url=None, subtitle=None):
+    """Generate HTML email template with embedded logo"""
+    logo_html = ''
+    if logo_url:
+        if not logo_url.startswith('data:'):
+            logo_url = f"data:image/png;base64,{logo_url}"
+        logo_html = f'<img src="{logo_url}" alt="Journies logo" style="width: 120px; height: auto; display: block;" />'
+        # print("Using embedded logo in email template.",logo_html)
+    
+    # subtitle_html = f'<h4 style="font-size: 14px; font-weight: 400; margin: 0 0 24px 0; color: #6b7280;">{subtitle}</h4>' if subtitle else ''
+    
     return f"""<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -9,20 +18,21 @@ def get_email_html_template(title, content, button_text, button_url, logo_url):
     <style>
       body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #ffffff; margin: 0; padding: 0; }}
       .container {{ background-color: #fafafa; width: 100%; max-width: 448px; border-radius: 16px; padding: 40px; text-align: center; margin: 40px auto; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }}
-      .logo {{ display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 24px; }}
-      .logo img {{ width: 120px; height: auto; }}
+      .logo {{ display: block; text-align: center; margin-bottom: 24px; }}
       h1 {{ font-size: 24px; font-weight: 600; margin: 0 0 8px 0; color: #000000; }}
-      p {{ color: #6b7280; margin: 0 0 24px 0; font-size: 14px; white-space: pre-wrap; }}
-      .button {{ display: inline-block; background-color: #000000; color: #ffffff; padding: 8px 24px; border-radius: 8px; font-weight: 500; text-decoration: none; transition: background-color 0.2s; }}
+      h4 {{ font-size: 14px; font-weight: 400; margin: 0 0 24px 0; color: #6b7280; }}
+      p {{ color: #6b7280; margin: 0 0 24px 0; font-size: 14px; line-height: 1.5; }}
+      .button {{ display: inline-block; background-color: #000000; color: #ffffff; padding: 12px 32px; border-radius: 8px; font-weight: 500; text-decoration: none; transition: background-color 0.2s; font-size: 16px; }}
       .button:hover {{ background-color: #1f2937; }}
     </style>
   </head>
   <body>
     <div class="container">
       <div class="logo">
-        <img src="{logo_url}" alt="journies.ai logo" />
+        {logo_html}
       </div>
       <h1>{title}</h1>
+      {f'<h4>{subtitle}</h4>' if subtitle else ''}
       <p>{content}</p>
       <a href="{button_url}" class="button">{button_text}</a>
     </div>

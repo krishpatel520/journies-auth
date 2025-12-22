@@ -13,10 +13,10 @@ class RateLimitMiddleware:
         
         # Rate limit configurations
         self.limits = {
-            '/api/v1/users/login/': {'requests': 5, 'window': 300},  # 5 requests per 5 minutes
-            '/api/v1/users/signup/': {'requests': 3, 'window': 3600},  # 3 requests per hour
-            '/api/v1/users/reset_password/': {'requests': 3, 'window': 3600},  # 3 requests per hour
-            'default': {'requests': 100, 'window': 3600}  # 100 requests per hour for other endpoints
+            # '/api/v1/users/login/': {'requests': 5, 'window': 300},  # 5 requests per 5 minutes
+            # '/api/v1/users/signup/': {'requests': 3, 'window': 3600},  # 3 requests per hour
+            # '/api/v1/users/reset_password/': {'requests': 3, 'window': 3600},  # 3 requests per hour
+            'default': {'requests': 5000, 'window': 3600}  # 5000 requests per hour for other endpoints
         }
     
     def __call__(self, request):
