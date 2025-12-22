@@ -54,7 +54,7 @@ MIDDLEWARE = [
 ]
 
 # CSRF and Security Settings
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://127.0.0.1:8000,http://localhost:8000').split(',')
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://127.0.0.1:8000,http://localhost:8000,http://192.168.71.244').split(',')
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
@@ -160,7 +160,7 @@ LOGGING = {
     },
 }
 
-FORCE_SCRIPT_NAME = config('BASE_ROUTE')  # Required for nginx proxy
+FORCE_SCRIPT_NAME = config('BASE_ROUTE', default='')  # Handled by nginx proxy
 
 # Frontend URL for invitation links
 FRONTEND_URL = config('FRONTEND_URL', default='http://192.168.71.244/login')
@@ -239,22 +239,20 @@ JWT_PUBLIC_PATHS = [
     '/admin/'
 ]
 
-# Email Configuration
-# TODO: Switch to SMTP backend for production email sending (needed for MFA/2FA implementation)
-# Currently using file-based backend for development - emails saved to email_files/ directory
-# For production: EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
-EMAIL_FILE_PATH = config('EMAIL_FILE_PATH', default=os.path.join(BASE_DIR, 'email_files'))
-EMAIL_HOST = config('EMAIL_HOST', default='localhost')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@example.com')
+# Email Configuration - SMTP
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = config('EMAIL_HOST')
+EMAIL_PORT = config('EMAIL_PORT', cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True', cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='compass@journies.ai')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 COMPASS_SERVICE_URL = config('COMPASS_SERVICE_URL', default='http://localhost:3001')
-
 
 # Password Encryption Configuration
 PASSWORD_CRYPT_KEY = config('PASSWORD_CRYPT_KEY')
 SALT = config('SALT')
+
+# Logo URL for email templates
+LOGO_URL = config('LOGO_URL', default='http://localhost:8001/static/images/Journies_logo.png')
