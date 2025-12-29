@@ -163,10 +163,12 @@ class UserModel(AbstractUser):
         }
     
     def soft_delete(self):
-        """Soft delete user - Auth service only updates auth fields"""
+        """Soft delete user - append timestamp to email for reuse"""
         self.is_deleted = True
         self.deleted_at = timezone.now()
-        self.save(update_fields=['is_deleted', 'deleted_at'])
+        # Append timestamp to email to free it up for reuse
+        self.email = f"{self.email}#{int(self.deleted_at.timestamp())}"
+        self.save(update_fields=['is_deleted', 'deleted_at', 'email'])
     
     def is_locked(self):
         """Check if account is locked due to failed attempts"""
