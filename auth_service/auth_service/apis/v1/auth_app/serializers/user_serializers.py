@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
-from django.db import connection
 import re
 import logging
 from django.conf import settings
@@ -33,10 +32,9 @@ class UserSerializer(serializers.ModelSerializer):
         """Get role name from role_id"""
         if obj.role_id:
             try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT name FROM journies_role WHERE id = %s", [obj.role_id])
-                    row = cursor.fetchone()
-                    return row[0] if row else f"role_{obj.role_id}"
+                from auth_app.models.property_model import Role
+                role = Role.objects.get(id=obj.role_id)
+                return role.name
             except:
                 return f"role_{obj.role_id}"
         return None
@@ -45,10 +43,9 @@ class UserSerializer(serializers.ModelSerializer):
         """Get property name from tenant"""
         if obj.tenant_id:
             try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT property_name FROM journies_property WHERE tenant_id = %s", [obj.tenant_id])
-                    row = cursor.fetchone()
-                    return row[0] if row else None
+                from auth_app.models.property_model import Property
+                property_obj = Property.objects.get(tenant_id=obj.tenant_id)
+                return property_obj.property_name
             except:
                 return None
         return None

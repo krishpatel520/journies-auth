@@ -196,7 +196,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 })
             return Response({'success': False, 'errorMessage': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            return Response({'success': False, 'errorMessage': 'Token verification failed', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'errorMessage': 'Token verification failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -237,7 +237,7 @@ class UserViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            return Response({'success': False, 'errorMessage': 'Token refresh failed', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'errorMessage': 'Token refresh failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -356,7 +356,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 
         except Exception as e:
             logger.error(f"Signup error: {e}")
-            return Response({'success': False, 'errorMessage': 'Signup failed', 'details': str(e)}, status=500)
+            return Response({'success': False, 'errorMessage': 'Signup failed'}, status=500)
 
     @swagger_auto_schema(
         method='post',
@@ -507,7 +507,7 @@ class UserViewSet(viewsets.ModelViewSet):
             
         except Exception as e:
             logger.error(f"Logout error: {e}")
-            return Response({'success': False, 'errorMessage': 'Logout failed', 'details': str(e)}, status=500)
+            return Response({'success': False, 'errorMessage': 'Logout failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',
