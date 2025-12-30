@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'auth_service.middleware.cache_control.NoCacheMiddleware',  # Cache control for sensitive data - EARLY
     'whitenoise.middleware.WhiteNoiseMiddleware',  # For production static files
     'auth_service.middleware.rate_limiting.RateLimitMiddleware',  # Rate limiting
     'django.contrib.sessions.middleware.SessionMiddleware',
