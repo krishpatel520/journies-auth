@@ -577,7 +577,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 if user.check_password(new_password):
                     return Response({'success': False, 'errorMessage': 'This password was used recently. Please choose a new one.'}, status=400)
                 
-                if user.reset_password_with_token(token, new_password, confirm_password):
+                if user.reset_password_with_token(token, new_password):
                     logger.info(f"Password reset successful for user: {user.email}")
                     return Response({'message': 'Your password has been reset successfully. Please sign in with your new password.'})
                 else:
