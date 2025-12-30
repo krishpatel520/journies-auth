@@ -17,6 +17,53 @@ class AuditViewSet(viewsets.ViewSet):
     """Audit log management endpoints"""
     permission_classes = [AllowAny]
     
+    def _validate_auth(self, request):
+        """Validate authorization and return user or error response"""
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if not auth_header.startswith('Bearer '):
+            return None, Response({'success': False, 'errorMessage': 'Authorization header required'}, status=401)
+        
+        token = auth_header.split(' ')[1]
+        payload = validate_jwt(token)
+        if not payload:
+            return None, Response({'success': False, 'errorMessage': 'Invalid token'}, status=401)
+        
+        try:
+            user = UserModel.objects.get(id=payload['sub'])
+            if user.is_deleted or not user.is_active:
+                return None, Response({'success': False, 'errorMessage': 'User account is inactive'}, status=401)
+            return user, None
+        except UserModel.DoesNotExist:
+            return None, Response({'success': False, 'errorMessage': 'User not found'}, status=404)
+    
+    def _get_query_params(self, request):
+        """Extract and validate query parameters"""
+        try:
+            days = int(request.GET.get('days', 30))
+        except (ValueError, TypeError):
+            return None, Response({'success': False, 'errorMessage': 'Invalid days parameter'}, status=400)
+        return {'days': days, 'action': request.GET.get('action'), 'status': request.GET.get('status')}, None
+    
+    def _format_logs(self, logs):
+        """Format log records for response"""
+        log_data = []
+        try:
+            for log in logs:
+                log_data.append({
+                    'id': str(log['id']),
+                    'action': log['action'],
+                    'resource': log['resource'],
+                    'user_id': str(log['user_id']) if log['user_id'] else None,
+                    'ip_address': log['ip_address'],
+                    'status': log['status'],
+                    'created_at': log['created_at'].isoformat(),
+                    'payload': log['payload'] or {}
+                })
+        except (AttributeError, ValueError, KeyError) as e:
+            logger.error(f"Error processing audit logs: {e}")
+            return None, Response({'success': False, 'errorMessage': 'Error processing audit logs'}, status=500)
+        return log_data, None
+    
     @swagger_auto_schema(
         method='get',
         manual_parameters=[
@@ -37,68 +84,37 @@ class AuditViewSet(viewsets.ViewSet):
     def logs(self, request):
         """Get audit logs for tenant"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-            if not auth_header.startswith('Bearer '):
-                return Response({'error': 'Authorization header required'}, status=401)
+            user, error = self._validate_auth(request)
+            if error:
+                return error
             
-            token = auth_header.split(' ')[1]
-            payload = validate_jwt(token)
+            params, error = self._get_query_params(request)
+            if error:
+                return error
             
-            if not payload:
-                return Response({'error': 'Invalid token'}, status=401)
+            since_date = timezone.now() - timedelta(days=params['days'])
+            logs = AuditLog.objects.filter(
+                tenant=user.tenant,
+                created_at__gte=since_date
+            )
             
-            try:
-                user = UserModel.objects.get(id=payload['sub'])
-                if user.is_deleted or not user.is_active:
-                    return Response({'error': 'User account is inactive'}, status=401)
-                
-                # Get query parameters
-                days = int(request.GET.get('days', 30))
-                action_filter = request.GET.get('action')
-                status_filter = request.GET.get('status')
-                
-                # Build query
-                since_date = timezone.now() - timedelta(days=days)
-                logs = AuditLog.objects.filter(
-                    tenant=user.tenant,
-                    created_at__gte=since_date
-                )
-                
-                if action_filter:
-                    logs = logs.filter(action__icontains=action_filter)
-                
-                if status_filter:
-                    logs = logs.filter(status=status_filter)
-                
-                # Limit to 1000 records
-                logs = logs[:1000]
-                
-                log_data = []
-                for log in logs:
-                    log_data.append({
-                        'id': str(log.id),
-                        'action': log.action,
-                        'resource': log.resource,
-                        'user_id': str(log.user_id) if log.user_id else None,
-                        'ip_address': log.ip_address,
-                        'status': log.status,
-                        'created_at': log.created_at.isoformat(),
-                        'payload': log.payload
-                    })
-                
-                return Response({
-                    'logs': log_data,
-                    'total': len(log_data),
-                    'filters': {
-                        'days': days,
-                        'action': action_filter,
-                        'status': status_filter
-                    }
-                })
-                
-            except UserModel.DoesNotExist:
-                return Response({'error': 'User not found'}, status=404)
+            if params['action']:
+                logs = logs.filter(action__icontains=params['action'])
+            if params['status']:
+                logs = logs.filter(status=params['status'])
+            
+            logs = logs.values('id', 'action', 'resource', 'user_id', 'ip_address', 'status', 'created_at', 'payload')[:1000]
+            
+            log_data, error = self._format_logs(logs)
+            if error:
+                return error
+            
+            return Response({
+                'logs': log_data,
+                'total': len(log_data),
+                'filters': params
+            })
                 
         except Exception as e:
             logger.error(f"Audit logs error: {e}")
-            return Response({'error': 'Failed to retrieve audit logs'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Failed to retrieve audit logs'}, status=500)
