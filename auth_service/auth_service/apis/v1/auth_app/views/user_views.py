@@ -485,15 +485,7 @@ class UserViewSet(viewsets.ModelViewSet):
                             'errorMessage': 'User is already logged out'
                         }, status=status.HTTP_400_BAD_REQUEST)
                     
-                    if active_tokens.count() > 1:
-                        logger.warning(f"Logout attempt for user with multiple active tokens: {user_email}")
-                        return Response({
-                            'success': False,
-                            'errorMessage': 'User is already logged out'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    
                     active_tokens.update(is_revoked=True)
-                    
                     TokenBlacklist.revoke_user_tokens(user_id, reason='logout') 
                     
                     logger.info(f"Successful logout for user: {user_email}")
