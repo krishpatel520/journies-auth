@@ -154,18 +154,14 @@ class UserViewSet(viewsets.ModelViewSet):
     def verify_token(self, request):
         """Verify JWT token for other microservices"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
             if not auth_header:
                 return Response({'success': False, 'errorMessage': 'Authorization header missing'}, status=status.HTTP_400_BAD_REQUEST)
             
             if not auth_header.startswith('Bearer '):
                 return Response({'success': False, 'errorMessage': 'Invalid authorization header format. Use: Bearer <token>'}, status=status.HTTP_400_BAD_REQUEST)
             
-            token_parts = auth_header.split(' ')
-            if len(token_parts) != 2:
-                return Response({'success': False, 'errorMessage': 'Invalid token format'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            token = token_parts[1]
+            token = auth_header[7:].strip()
             if not token:
                 return Response({'success': False, 'errorMessage': 'Token is empty'}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -448,7 +444,7 @@ class UserViewSet(viewsets.ModelViewSet):
     def logout(self, request):
         """Logout user by revoking refresh tokens and blacklisting access tokens"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
             if not auth_header:
                 logger.warning("Logout attempt without authorization header")
                 return Response({'success': False, 'errorMessage': 'Authorization header required'}, status=401)
@@ -457,12 +453,10 @@ class UserViewSet(viewsets.ModelViewSet):
                 logger.warning("Logout attempt with invalid authorization header format")
                 return Response({'success': False, 'errorMessage': 'Invalid authorization header format'}, status=401)
             
-            token_parts = auth_header.split(' ')
-            if len(token_parts) != 2:
-                logger.warning("Logout attempt with malformed authorization header")
-                return Response({'success': False, 'errorMessage': 'Invalid authorization header format'}, status=401)
-            
-            token = token_parts[1]
+            token = auth_header[7:].strip()
+            if not token:
+                logger.warning("Logout attempt with empty token")
+                return Response({'success': False, 'errorMessage': 'Token is empty'}, status=401)
             payload = validate_jwt(token)
             
             if not payload:
@@ -647,11 +641,11 @@ class UserViewSet(viewsets.ModelViewSet):
     def change_password(self, request):
         """Change password for authenticated user"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-            if not auth_header.startswith('Bearer '):
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
+            if not auth_header or not auth_header.startswith('Bearer '):
                 return Response({'success': False, 'errorMessage': 'Authorization header required'}, status=401)
             
-            token = auth_header.split(' ')[1]
+            token = auth_header[7:].strip()
             payload = validate_jwt(token)
             
             if not payload:
