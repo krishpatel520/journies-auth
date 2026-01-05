@@ -55,13 +55,15 @@ def JWTAuthenticationMiddleware(get_response):
         
         if needs_jwt:
             # Require JWT for protected endpoints
-            auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+            auth_header = request.META.get("HTTP_AUTHORIZATION", "").strip()
             if not auth_header.startswith("Bearer "):
                 logger.warning(f"Missing or invalid auth header for {request.path_info}")
                 return JsonResponse({"detail": "Missing or invalid token"}, status=401)
 
-            token = auth_header.split(" ")[1]
+            token = auth_header[7:].strip()
+            logger.debug(f"Token: {token[:50]}...")
             payload = validate_jwt(token)
+            logger.debug(f"Payload: {payload}")
 
             if not payload:
                 logger.warning(f"Invalid or revoked JWT token for {request.path_info}")

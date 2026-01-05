@@ -32,7 +32,7 @@ class UserSerializer(serializers.ModelSerializer):
         """Get role name from role_id"""
         if obj.role_id:
             try:
-                from auth_app.models.property_model import Role
+                from auth_app.models.role_model import Role
                 role = Role.objects.get(id=obj.role_id)
                 return role.name
             except:
