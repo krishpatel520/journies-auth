@@ -12,14 +12,15 @@ class UserSerializer(serializers.ModelSerializer):
     property_name = serializers.SerializerMethodField()
     invited_by_name = serializers.SerializerMethodField()
     joining_date = serializers.SerializerMethodField()
+    department_name = serializers.SerializerMethodField()
     
     class Meta:
         model = UserModel
         fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 
                   'created_at', 'role_name', 'property_name', 'invited_by_name', 
-                  'status', 'joining_date', 'email_verification_sent_at']
+                  'status', 'joining_date', 'email_verification_sent_at', 'department_name']
         read_only_fields = ['id', 'created_at', 'role_name', 'property_name', 
-                           'invited_by_name', 'joining_date', 'email_verification_sent_at']
+                           'invited_by_name', 'joining_date', 'email_verification_sent_at', 'department_name']
     
     # def get_profile_photo(self, obj):
     #     """Return user profile photo or default"""
@@ -32,7 +33,7 @@ class UserSerializer(serializers.ModelSerializer):
         """Get role name from role_id"""
         if obj.role_id:
             try:
-                from auth_app.models.property_model import Role
+                from auth_app.models.role_model import Role
                 role = Role.objects.get(id=obj.role_id)
                 return role.name
             except:
@@ -65,6 +66,17 @@ class UserSerializer(serializers.ModelSerializer):
         if obj.is_superuser or not obj.invited_by_id:
             return None
         return obj.date_joined
+    
+    def get_department_name(self, obj):
+        """Get department name from department_id"""
+        if obj.department_id:
+            try:
+                from auth_app.models.department_model import Department
+                department = Department.objects.get(id=obj.department_id)
+                return department.name
+            except:
+                return f"department_{obj.department_id}"
+        return None
 
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
