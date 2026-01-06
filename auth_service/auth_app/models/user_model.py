@@ -95,6 +95,7 @@ class UserModel(AbstractUser):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
     invited_by_id = models.UUIDField(null=True, blank=True)
+    department_id = models.BigIntegerField(null=True, blank=True)
 
     
     # Onboarding & Plan Status
@@ -159,7 +160,7 @@ class UserModel(AbstractUser):
             'access_token': access_token,
             'refresh_token': str(refresh_token.token),
             'token_type': 'Bearer',
-            'expires_in': 3600
+            'expires_in': 3600000
         }
     
     def soft_delete(self):

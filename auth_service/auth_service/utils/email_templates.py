@@ -1,13 +1,15 @@
+import logging
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
 def get_email_html_template(title, content, button_text, button_url, logo_url=None, subtitle=None):
-    """Generate HTML email template with embedded logo"""
+    """Generate HTML email template with logo URL"""
     logo_html = ''
-    if logo_url:
-        if not logo_url.startswith('data:'):
-            logo_url = f"data:image/png;base64,{logo_url}"
-        logo_html = f'<img src="{logo_url}" alt="Journies logo" style="width: 120px; height: auto; display: block;" />'
-        # print("Using embedded logo in email template.",logo_html)
     
-    # subtitle_html = f'<h4 style="font-size: 14px; font-weight: 400; margin: 0 0 24px 0; color: #6b7280;">{subtitle}</h4>' if subtitle else ''
+    if logo_url:
+        logo_html = f'<img src="{logo_url}" alt="Journies logo" style="width: 120px; height: auto; display: block;" />'
+        logger.info(f"Using logo URL: {logo_url}")
     
     return f"""<!DOCTYPE html>
 <html lang="en">
