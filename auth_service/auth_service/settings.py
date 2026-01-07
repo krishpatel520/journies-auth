@@ -37,12 +37,14 @@ INSTALLED_APPS = [
 
     'auth_app',
     'rest_framework',
-    'drf_yasg',]
+    'drf_yasg',
+    'corsheaders',]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'auth_service.middleware.cache_control.NoCacheMiddleware',  # Cache control for sensitive data - EARLY
     'whitenoise.middleware.WhiteNoiseMiddleware',  # For production static files
+    'corsheaders.middleware.CorsMiddleware',
     'auth_service.middleware.rate_limiting.RateLimitMiddleware',  # Rate limiting
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -161,7 +163,7 @@ LOGGING = {
     },
 }
 
-FORCE_SCRIPT_NAME = config('BASE_ROUTE', default='')  # Handled by nginx proxy
+FORCE_SCRIPT_NAME = config('BASE_ROUTE')
 
 # Frontend URL for invitation links
 FRONTEND_URL = config('FRONTEND_URL', default='http://192.168.71.244/login')
