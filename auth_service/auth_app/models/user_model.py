@@ -260,13 +260,19 @@ class UserModel(AbstractUser):
         email.send(fail_silently=False)
     
     def verify_email(self, token):
-        """Verify email with token - reusable until first verification, no expiry"""
+        """Verify email with token - keep token until status=active"""
         if self.email_verification_token == token and not self.is_email_verified:
             self.is_email_verified = True
-            self.email_verification_token = None
-            self.save(update_fields=['is_email_verified', 'email_verification_token'])
+            self.status = 'pending'
+            self.save(update_fields=['is_email_verified', 'status'])
             return True
         return False
+    
+    def activate_user(self):
+        """Activate user and clear verification token"""
+        self.status = 'active'
+        self.email_verification_token = None
+        self.save(update_fields=['status', 'email_verification_token'])
     
     def generate_password_reset_token(self):
         """Generate password reset token"""
