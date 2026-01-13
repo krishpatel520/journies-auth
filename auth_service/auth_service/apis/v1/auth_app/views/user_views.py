@@ -375,15 +375,17 @@ class UserViewSet(viewsets.ModelViewSet):
                 user = UserModel.objects.get(email_verification_token=token)
                 logger.info(f"Found user with token: {user.email}, is_email_verified: {user.is_email_verified}")
                 
-                if user.is_email_verified:
+                # For invited users, allow re-verification until onboarding is complete
+                if user.is_email_verified and user.is_onboarding_complete:
                     return Response({'success': False, 'errorMessage': 'Email already verified'}, status=400)
                 
                 if user.verify_email(token):
                     user.is_active = True
                     user.status = 'active'
-
-                    user.save(update_fields=['is_active', 'status'])
-
+                    # Only clear token after onboarding is complete
+                    if user.is_onboarding_complete:
+                        user.email_verification_token = None
+                    user.save(update_fields=['is_active', 'status', 'email_verification_token'])
                     logger.info(f"Email verified successfully for user: {user.email}")
 
                     # Publish event to Redis after email verification
