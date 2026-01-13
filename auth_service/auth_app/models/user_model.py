@@ -260,11 +260,12 @@ class UserModel(AbstractUser):
         email.send(fail_silently=False)
     
     def verify_email(self, token):
-        """Verify email with token - keep token until status=active"""
-        if self.email_verification_token == token and not self.is_email_verified:
-            self.is_email_verified = True
-            self.status = 'pending'
-            self.save(update_fields=['is_email_verified', 'status'])
+        """Verify email with token - keep token until onboarding complete"""
+        if self.email_verification_token == token:
+            if not self.is_email_verified:
+                self.is_email_verified = True
+                self.status = 'pending'
+                self.save(update_fields=['is_email_verified', 'status'])
             return True
         return False
     
@@ -293,16 +294,14 @@ class UserModel(AbstractUser):
         logo_url = getattr(settings, 'LOGO_URL', None)
         
         subject = 'Forgot password? Reset now'
-        text_content = f"""Forgot your password? It happens to the best of us.
-To reset your password, click the button below."""
+        text_content = reset_url
         
         html_content = get_email_html_template(
-            title="Forgot your password? It happens to the best of us.<br/><br/>",
-            content="To reset your password, click the button below.",
+            title="Forgot your password?",
+            content="It happens to the best of us. To reset your password, click the button below.",
             button_text="Reset Password",
             button_url=reset_url,
-            logo_url=logo_url,
-            # subtitle="To reset your password, click the button below."
+            logo_url=logo_url
         )
         
         email = EmailMultiAlternatives(
