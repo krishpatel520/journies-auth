@@ -79,8 +79,7 @@ class UserModel(AbstractUser):
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
-    username = models.CharField(null=False, blank=False, max_length=255, unique=False)
-
+    username = models.CharField(null=False, blank=False, max_length=255, unique=False, default="unknown")
     email = models.EmailField(unique=True, validators=[validate_unique_email])
     
     # Auth Service Fields Only
