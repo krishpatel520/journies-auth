@@ -24,7 +24,7 @@ class Tenant(models.Model):
     code = models.CharField(unique=True, null=True, blank=True, max_length=50, 
         validators=[ MinLengthValidator(2, 'Name must be at least 2 characters long'), ],
         db_index=True,
-        help_text='Name (2-50 characters)'),
+        help_text='Name (2-50 characters)')
     name = models.TextField(null=True, blank=True)
     status = models.CharField(
     max_length=20,
