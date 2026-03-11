@@ -6,6 +6,8 @@ from datetime import timedelta
 import uuid
 from auth_service.utils.auth_utils import generate_jwt
 from auth_service.utils.email_templates import get_email_html_template
+from django.core.validators import MinLengthValidator
+
 
 def validate_unique_email(value):
     """Validate email is unique for non-deleted users only"""
@@ -19,18 +21,25 @@ def validate_unique_email(value):
 class Tenant(models.Model):
     """Tenants table"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    code = models.TextField(unique=True, null=True, blank=True)
+    code = models.CharField(unique=True, null=True, blank=True, max_length=50, 
+        validators=[ MinLengthValidator(2, 'Name must be at least 2 characters long'), ],
+        db_index=True,
+        help_text='Name (2-50 characters)')
     name = models.TextField(null=True, blank=True)
-    status = models.TextField(default='active')
+    status = models.CharField(
+    max_length=20,
+    default='active'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict)
     
     class Meta:
         db_table = 'journies_tenant'
     
     def __str__(self):
-        return f"{self.name} ({self.code})"
-
+        return f"{self.name} ({self.code})" 
 class UserModelManager(BaseUserManager):
     def get_queryset(self):
         """Exclude soft-deleted users by default"""
@@ -79,11 +88,12 @@ class UserModel(AbstractUser):
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
-    username = None
-    email = models.EmailField(unique=True, validators=[validate_unique_email])
+    username = models.CharField(null=False, blank=False, max_length=255, unique=False, default="unknown")
+    email = models.EmailField(unique=True, null=False, blank=False, validators=[validate_unique_email])
     
     # Auth Service Fields Only
     is_active = models.BooleanField(default=True, help_text="Account active/suspended status")
+    is_staff = models.BooleanField(default=False, help_text="Staff access flag")
     created_at = models.DateTimeField(auto_now_add=True)
     date_joined = models.DateTimeField(default=timezone.now, verbose_name='date joined')
     last_login = models.DateTimeField(null=True, blank=True)
@@ -129,8 +139,8 @@ class UserModel(AbstractUser):
     
     objects = UserModelManager()
     
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["tenant"]
     
     class Meta:
         db_table = 'journies_usermodel'
@@ -392,7 +402,7 @@ class AuditLog(models.Model):
     """Audit logs for security and compliance"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, null=True, blank=True)
-    user_id = models.UUIDField(null=True, blank=True)
+    user = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True, blank=True)
     action = models.CharField(max_length=255)
     resource = models.CharField(max_length=255, null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)

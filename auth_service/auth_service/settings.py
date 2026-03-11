@@ -130,7 +130,8 @@ USE_TZ = True
 
 
 # Static files (minimal for API service)
-STATIC_URL = '/auth/static/'
+BASE_ROUTE = config('BASE_ROUTE', default='')
+STATIC_URL = f'{BASE_ROUTE}/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Only for admin/swagger UI static files
@@ -163,7 +164,7 @@ LOGGING = {
     },
 }
 
-FORCE_SCRIPT_NAME = config('BASE_ROUTE')
+FORCE_SCRIPT_NAME = BASE_ROUTE
 
 # Frontend URL for invitation links
 FRONTEND_URL = config('FRONTEND_URL', default='http://192.168.71.244/login')
