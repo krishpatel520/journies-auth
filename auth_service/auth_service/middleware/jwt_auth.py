@@ -19,11 +19,11 @@ def JWTAuthenticationMiddleware(get_response):
             '/api/v1/users/verify_token/',
             '/api/v1/users/refresh_token/',
             '/api/v1/users/verify_email/',
-            # '/api/v1/users/resend_verification/',
-            # '/api/v1/users/check_verification_status/',
             '/api/v1/users/forgot_password/',
             '/api/v1/users/reset_password/',
             '/api/v1/users/revoke_tokens/',
+            '/api/v1/users/logout/',
+            '/api/v1/users/change_password/',
             '/.well-known/jwks.json',
             '/health/',
             '/swagger/',
@@ -55,13 +55,15 @@ def JWTAuthenticationMiddleware(get_response):
         
         if needs_jwt:
             # Require JWT for protected endpoints
-            auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+            auth_header = request.META.get("HTTP_AUTHORIZATION", "").strip()
             if not auth_header.startswith("Bearer "):
                 logger.warning(f"Missing or invalid auth header for {request.path_info}")
                 return JsonResponse({"detail": "Missing or invalid token"}, status=401)
 
-            token = auth_header.split(" ")[1]
+            token = auth_header[7:].strip()
+            logger.debug(f"Token: {token[:50]}...")
             payload = validate_jwt(token)
+            logger.debug(f"Payload: {payload}")
 
             if not payload:
                 logger.warning(f"Invalid or revoked JWT token for {request.path_info}")

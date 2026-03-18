@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from auth_app.models.user_model import UserModel
-from django.db import connection
 import re
 import logging
 from django.conf import settings
@@ -13,14 +12,15 @@ class UserSerializer(serializers.ModelSerializer):
     property_name = serializers.SerializerMethodField()
     invited_by_name = serializers.SerializerMethodField()
     joining_date = serializers.SerializerMethodField()
+    department_name = serializers.SerializerMethodField()
     
     class Meta:
         model = UserModel
         fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'is_active', 
                   'created_at', 'role_name', 'property_name', 'invited_by_name', 
-                  'status', 'joining_date']
+                  'status', 'joining_date', 'email_verification_sent_at', 'department_name']
         read_only_fields = ['id', 'created_at', 'role_name', 'property_name', 
-                           'invited_by_name', 'joining_date']
+                           'invited_by_name', 'joining_date', 'email_verification_sent_at', 'department_name']
     
     # def get_profile_photo(self, obj):
     #     """Return user profile photo or default"""
@@ -33,10 +33,9 @@ class UserSerializer(serializers.ModelSerializer):
         """Get role name from role_id"""
         if obj.role_id:
             try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT name FROM journies_role WHERE id = %s", [obj.role_id])
-                    row = cursor.fetchone()
-                    return row[0] if row else f"role_{obj.role_id}"
+                from auth_app.models.role_model import Role
+                role = Role.objects.get(id=obj.role_id)
+                return role.name
             except:
                 return f"role_{obj.role_id}"
         return None
@@ -45,10 +44,9 @@ class UserSerializer(serializers.ModelSerializer):
         """Get property name from tenant"""
         if obj.tenant_id:
             try:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT property_name FROM journies_property WHERE tenant_id = %s", [obj.tenant_id])
-                    row = cursor.fetchone()
-                    return row[0] if row else None
+                from auth_app.models.property_model import Property
+                property_obj = Property.objects.get(tenant_id=obj.tenant_id)
+                return property_obj.property_name
             except:
                 return None
         return None
@@ -68,6 +66,17 @@ class UserSerializer(serializers.ModelSerializer):
         if obj.is_superuser or not obj.invited_by_id:
             return None
         return obj.date_joined
+    
+    def get_department_name(self, obj):
+        """Get department name from department_id"""
+        if obj.department_id:
+            try:
+                from auth_app.models.department_model import Department
+                department = Department.objects.get(id=obj.department_id)
+                return department.name
+            except:
+                return f"department_{obj.department_id}"
+        return None
 
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()

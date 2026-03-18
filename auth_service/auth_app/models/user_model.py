@@ -1,9 +1,18 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import timedelta
 import uuid
 from auth_service.utils.auth_utils import generate_jwt
+from auth_service.utils.email_templates import get_email_html_template
+from django.core.validators import MinLengthValidator
+
+
+def validate_unique_email(value):
+    """Validate email is unique for non-deleted users only"""
+    if UserModel.objects.filter(email=value, is_deleted=False).exists():
+        raise ValidationError('A user with this email already exists.')
 
 # ============================================================================
 # TENANT MODEL 
@@ -12,19 +21,25 @@ from auth_service.utils.auth_utils import generate_jwt
 class Tenant(models.Model):
     """Tenants table"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
-    code = models.TextField(unique=True, null=True, blank=True)
+    code = models.CharField(unique=True, null=True, blank=True, max_length=50, 
+        validators=[ MinLengthValidator(2, 'Name must be at least 2 characters long'), ],
+        db_index=True,
+        help_text='Name (2-50 characters)')
     name = models.TextField(null=True, blank=True)
-    status = models.TextField(default='active')
-    # plan = models.TextField(null=True, blank=True)
+    status = models.CharField(
+    max_length=20,
+    default='active'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict)
     
     class Meta:
         db_table = 'journies_tenant'
     
     def __str__(self):
-        return f"{self.name} ({self.code})"
-
+        return f"{self.name} ({self.code})" 
 class UserModelManager(BaseUserManager):
     def get_queryset(self):
         """Exclude soft-deleted users by default"""
@@ -73,11 +88,12 @@ class UserModel(AbstractUser):
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
-    username = None
-    email = models.EmailField(unique=True)
+    username = models.CharField(null=False, blank=False, max_length=255, unique=False, default="unknown")
+    email = models.EmailField(unique=True, null=False, blank=False, validators=[validate_unique_email])
     
     # Auth Service Fields Only
     is_active = models.BooleanField(default=True, help_text="Account active/suspended status")
+    is_staff = models.BooleanField(default=False, help_text="Staff access flag")
     created_at = models.DateTimeField(auto_now_add=True)
     date_joined = models.DateTimeField(default=timezone.now, verbose_name='date joined')
     last_login = models.DateTimeField(null=True, blank=True)
@@ -89,7 +105,7 @@ class UserModel(AbstractUser):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role_id = models.BigIntegerField(null=True, blank=True, help_text="Role ID from Compass service")
     invited_by_id = models.UUIDField(null=True, blank=True)
-    # profile_photo = models.URLField(null=True, blank=True, help_text="User profile photo URL") # Todo: future enhancement
+    department_id = models.BigIntegerField(null=True, blank=True)
 
     
     # Onboarding & Plan Status
@@ -123,8 +139,8 @@ class UserModel(AbstractUser):
     
     objects = UserModelManager()
     
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["tenant"]
     
     class Meta:
         db_table = 'journies_usermodel'
@@ -132,7 +148,6 @@ class UserModel(AbstractUser):
     
     def save(self, *args, **kwargs):
         """Save user - field restrictions enforced at serializer/API level"""
-        # Set date_joined for invited users on first save
         if self.pk is None and self.invited_by_id and not self.is_superuser:
             self.date_joined = timezone.now()
         super().save(*args, **kwargs)
@@ -155,14 +170,16 @@ class UserModel(AbstractUser):
             'access_token': access_token,
             'refresh_token': str(refresh_token.token),
             'token_type': 'Bearer',
-            'expires_in': 3600
+            'expires_in': 3600000
         }
     
     def soft_delete(self):
-        """Soft delete user - Auth service only updates auth fields"""
+        """Soft delete user - append timestamp to email for reuse"""
         self.is_deleted = True
         self.deleted_at = timezone.now()
-        self.save(update_fields=['is_deleted', 'deleted_at'])
+        # Append timestamp to email to free it up for reuse
+        self.email = f"{self.email}#{int(self.deleted_at.timestamp())}"
+        self.save(update_fields=['is_deleted', 'deleted_at', 'email'])
     
     def is_locked(self):
         """Check if account is locked due to failed attempts"""
@@ -200,31 +217,73 @@ class UserModel(AbstractUser):
         return self.email_verification_token
     
     def send_verification_email(self, request=None):
-        """Send verification email"""
-        from django.core.mail import send_mail
+        """Send verification email with HTML template"""
+        from django.core.mail import EmailMultiAlternatives
         from django.conf import settings
         
         token = self.generate_verification_token()
         base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         verification_url = f"{base_url}/verify-email?token={token}"
+        logo_url = getattr(settings, 'LOGO_URL', None)
         
-        send_mail(
-            subject='Verify your email address',
-            message=f'Click the link to verify your email: {verification_url}',
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
-            recipient_list=[self.email],
-            fail_silently=False,
+        if self.invited_by_id:
+            # Invited user
+            from auth_app.models.property_model import Property
+            property = Property.objects.get(tenant_id=self.tenant_id)
+            property_name = property.property_name
+            
+            subject = f"Join {property_name} Journey!"
+            text_content = f"You've been invited to join {property_name}'s journey. Please verify your email to continue.\n\n{verification_url}"
+            
+            html_content = get_email_html_template(
+                title=subject,
+                content=text_content,
+                button_text="Verify Email",
+                button_url=verification_url,
+                logo_url=logo_url
+            )
+        else:
+            # Owner signup
+            subject = "Verify your email address"
+            content_html = f'<h1>Welcome to Journies!</h1><p>Please verify your email to continue.</p>'
+            # text_content = """Welcome to Journies!
+            # Please verify your email to continue.
+
+            # """ 
+            # + verification_url
+                        
+            html_content = get_email_html_template(
+                title=subject,
+                content=content_html,
+                button_text="Verify Email",
+                button_url=verification_url,
+                logo_url=logo_url
+            )
+        
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=content_html,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'compass@journies.ai'),
+            to=[self.email]
         )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
     
     def verify_email(self, token):
-        """Verify email with token - reusable until first verification, no expiry"""
-        if self.email_verification_token == token and not self.is_email_verified:
-            
-            self.is_email_verified = True
-            self.email_verification_token = None
-            self.save(update_fields=['is_email_verified', 'email_verification_token'])
+        """Verify email with token - keep token until onboarding complete"""
+        if self.email_verification_token == token:
+            if not self.is_email_verified:
+                self.is_email_verified = True
+                self.status = 'pending'
+                self.save(update_fields=['is_email_verified', 'status'])
             return True
         return False
+    
+    def activate_user(self):
+        """Activate user and clear verification token"""
+        self.status = 'active'
+        self.email_verification_token = None
+        self.save(update_fields=['status', 'email_verification_token'])
     
     def generate_password_reset_token(self):
         """Generate password reset token"""
@@ -235,21 +294,34 @@ class UserModel(AbstractUser):
         return self.password_reset_token
     
     def send_password_reset_email(self, request=None):
-        """Send password reset email"""
-        from django.core.mail import send_mail
+        """Send password reset email with HTML template"""
+        from django.core.mail import EmailMultiAlternatives
         from django.conf import settings
         
         token = self.generate_password_reset_token()
         base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         reset_url = f"{base_url}/reset-password?token={token}"
+        logo_url = getattr(settings, 'LOGO_URL', None)
         
-        send_mail(
-            subject='Reset your password',
-            message=f'Click the link to reset your password: {reset_url}',
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
-            recipient_list=[self.email],
-            fail_silently=False,
+        subject = 'Forgot password? Reset now'
+        text_content = reset_url
+        
+        html_content = get_email_html_template(
+            title="Forgot your password?",
+            content="It happens to the best of us. To reset your password, click the button below.",
+            button_text="Reset Password",
+            button_url=reset_url,
+            logo_url=logo_url
         )
+        
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'compass@journies.ai'),
+            to=[self.email]
+        )
+        email.attach_alternative(html_content, "text/html")
+        email.send(fail_silently=False)
     
     def verify_password_reset_token(self, token):
         """Verify password reset token"""
@@ -330,7 +402,7 @@ class AuditLog(models.Model):
     """Audit logs for security and compliance"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, null=True, blank=True)
-    user_id = models.UUIDField(null=True, blank=True)
+    user = models.ForeignKey(UserModel, on_delete=models.SET_NULL, null=True, blank=True)
     action = models.CharField(max_length=255)
     resource = models.CharField(max_length=255, null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)

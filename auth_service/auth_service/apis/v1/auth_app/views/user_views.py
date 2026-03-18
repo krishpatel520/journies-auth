@@ -25,25 +25,28 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [AllowAny]
     authentication_classes = []
     
+    def _disabled_method(self, request, *args, **kwargs):
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    
     @swagger_auto_schema(auto_schema=None)
     def list(self, request, *args, **kwargs):
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._disabled_method(request, *args, **kwargs)
     
     @swagger_auto_schema(auto_schema=None)
     def create(self, request, *args, **kwargs):
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._disabled_method(request, *args, **kwargs)
     
     @swagger_auto_schema(auto_schema=None)
     def update(self, request, *args, **kwargs):
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._disabled_method(request, *args, **kwargs)
     
     @swagger_auto_schema(auto_schema=None)
     def partial_update(self, request, *args, **kwargs):
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._disabled_method(request, *args, **kwargs)
     
     @swagger_auto_schema(auto_schema=None)
     def destroy(self, request, *args, **kwargs):
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        return self._disabled_method(request, *args, **kwargs)
     
     def retrieve(self, request, *args, **kwargs):
         """Get single user details"""
@@ -52,7 +55,7 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance)
             return Response(serializer.data)
         except UserModel.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'success': False, 'errorMessage': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     
     @swagger_auto_schema(
         method='post',
@@ -67,7 +70,8 @@ class UserViewSet(viewsets.ModelViewSet):
             if not serializer.is_valid():
                 logger.warning(f"Login validation failed: {serializer.errors}")
                 return Response({
-                    'error': 'Invalid email or password'
+                    'success': False,
+                    'errorMessage': 'Invalid email or password'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             email = serializer.validated_data['email']
@@ -78,14 +82,14 @@ class UserViewSet(viewsets.ModelViewSet):
             plain_password = decrypt_frontend_password(password)
             if not plain_password:
                 logger.warning(f"Invalid password format for email: {email}")
-                return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'success': False, 'errorMessage': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
             
             try:
                 user = UserModel.objects.get(email=email)
                 
                 if user.is_locked():
                     logger.warning(f"Login attempt for locked account: {email}")
-                    return Response({'error': 'Account temporarily locked due to multiple failed attempts'}, status=status.HTTP_423_LOCKED)
+                    return Response({'success': False, 'errorMessage': 'Account temporarily locked due to multiple failed attempts'}, status=status.HTTP_423_LOCKED)
                 
                 if user.check_password(plain_password):
                     user.reset_failed_attempts()
@@ -98,18 +102,19 @@ class UserViewSet(viewsets.ModelViewSet):
             if user:
                 if user.is_deleted:
                     logger.warning(f"Login attempt for deleted user: {email}")
-                    return Response({'error': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
+                    return Response({'success': False, 'errorMessage': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
                 if not user.is_active:
                     if not user.is_email_verified:
                         logger.warning(f"Login attempt for unverified user: {email}")
                         return Response({
-                            'error': 'Please check your email to verify your account.',
+                            'success': False,
+                            'errorMessage': 'Please check your email to verify your account.',
                             'verification_required': True,
                             'email': user.email
                         }, status=status.HTTP_401_UNAUTHORIZED)
                     else:
                         logger.warning(f"Login attempt for inactive user: {email}")
-                        return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
+                        return Response({'success': False, 'errorMessage': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
                 
                 token_data = user.generate_jwt_token()
                 logger.info(f"Successful login for user: {email}")
@@ -126,10 +131,10 @@ class UserViewSet(viewsets.ModelViewSet):
                     pass
             
             logger.warning(f"Failed login attempt for email: {email}")
-            return Response({'error': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'success': False, 'errorMessage': 'Invalid email or password'}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             logger.error(f"Login error for {request.data.get('email')}: {e}")
-            return Response({'error': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'errorMessage': 'Login failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -149,20 +154,16 @@ class UserViewSet(viewsets.ModelViewSet):
     def verify_token(self, request):
         """Verify JWT token for other microservices"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
             if not auth_header:
-                return Response({'error': 'Authorization header missing'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'success': False, 'errorMessage': 'Authorization header missing'}, status=status.HTTP_400_BAD_REQUEST)
             
             if not auth_header.startswith('Bearer '):
-                return Response({'error': 'Invalid authorization header format. Use: Bearer <token>'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'success': False, 'errorMessage': 'Invalid authorization header format. Use: Bearer <token>'}, status=status.HTTP_400_BAD_REQUEST)
             
-            token_parts = auth_header.split(' ')
-            if len(token_parts) != 2:
-                return Response({'error': 'Invalid token format'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            token = token_parts[1]
+            token = auth_header[7:].strip()
             if not token:
-                return Response({'error': 'Token is empty'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'success': False, 'errorMessage': 'Token is empty'}, status=status.HTTP_400_BAD_REQUEST)
             
             payload = validate_jwt(token)
             
@@ -170,13 +171,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 try:
                     user = UserModel.objects.get(id=payload['sub'])
                     if user.is_deleted:
-                        return Response({'error': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
+                        return Response({'success': False, 'errorMessage': 'User account has been deleted'}, status=status.HTTP_401_UNAUTHORIZED)
                     if not user.is_active:
-                        return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
+                        return Response({'success': False, 'errorMessage': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
                 except UserModel.DoesNotExist:
-                    return Response({'error': 'User not found'}, status=status.HTTP_401_UNAUTHORIZED)
+                    return Response({'success': False, 'errorMessage': 'User not found'}, status=status.HTTP_401_UNAUTHORIZED)
 
                 return Response({
+                    'success': True,
                     'valid': True,
                     'sub': payload['sub'],
                     'email': payload['email'],
@@ -188,9 +190,9 @@ class UserViewSet(viewsets.ModelViewSet):
                     'is_active': user.is_active,
                     'exp': payload['exp']
                 })
-            return Response({'error': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'success': False, 'errorMessage': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            return Response({'error': 'Token verification failed', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'errorMessage': 'Token verification failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -207,20 +209,20 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             refresh_token = request.data.get('refresh_token')
             if not refresh_token:
-                return Response({'error': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'success': False, 'errorMessage': 'Refresh token is required'}, status=status.HTTP_400_BAD_REQUEST)
             
             try:
                 token_obj = RefreshToken.objects.get(token=refresh_token, is_revoked=False)
             except RefreshToken.DoesNotExist:
-                return Response({'error': 'Invalid refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'success': False, 'errorMessage': 'Invalid refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
             
             if token_obj.is_expired():
                 token_obj.revoke()
-                return Response({'error': 'Refresh token expired'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'success': False, 'errorMessage': 'Refresh token expired'}, status=status.HTTP_401_UNAUTHORIZED)
             
             user = token_obj.user
             if not user.is_active or user.is_deleted:
-                return Response({'error': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'success': False, 'errorMessage': 'User account is inactive'}, status=status.HTTP_401_UNAUTHORIZED)
             
             token_obj.revoke()
             new_token_data = user.generate_jwt_token()
@@ -231,7 +233,7 @@ class UserViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            return Response({'error': 'Token refresh failed', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'errorMessage': 'Token refresh failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @swagger_auto_schema(
         method='post',
@@ -248,7 +250,7 @@ class UserViewSet(viewsets.ModelViewSet):
             
             serializer = SignupSerializer(data=request.data)
             if not serializer.is_valid():
-                return Response({'error': 'Validation failed', 'details': serializer.errors}, status=400)
+                return Response({'success': False, 'errorMessage': 'Validation failed', 'details': serializer.errors}, status=400)
             
             data = serializer.validated_data
             logger.info(f"Signup attempt for email: {data['email']}")
@@ -256,33 +258,33 @@ class UserViewSet(viewsets.ModelViewSet):
             existing_user = UserModel.objects.filter(email=data['email']).first()
             if existing_user and not existing_user.invited_by_id:
                 logger.warning(f"Signup failed - email already exists: {data['email']}")
-                return Response({'error': 'Email already exists'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Email already exists'}, status=400)
             
             phone_number = data.get('phone_number')
             if phone_number and not existing_user:
                 if UserModel.objects.filter(phone_number=phone_number).exists():
                     logger.warning(f"Signup failed - phone number already exists: {phone_number}")
-                    return Response({'error': 'Phone number already exists'}, status=400)
+                    return Response({'success': False, 'errorMessage': 'Phone number already exists'}, status=400)
             
             plain_password = decrypt_frontend_password(data['password'])
             if not plain_password:
                 logger.warning(f"Signup failed - invalid password format for email: {data['email']}")
-                return Response({'error': 'Invalid password format'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid password format'}, status=400)
             
             if len(plain_password) < 8:
-                return Response({'error': 'Password must be at least 8 characters long'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Password must be at least 8 characters long'}, status=400)
             if not re.search(r'[a-z]', plain_password):
-                return Response({'error': 'Password must contain at least one lowercase letter'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Password must contain at least one lowercase letter'}, status=400)
             if not re.search(r'[A-Z]', plain_password):
-                return Response({'error': 'Password must contain at least one uppercase letter'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Password must contain at least one uppercase letter'}, status=400)
             if not re.search(r'\d', plain_password):
-                return Response({'error': 'Password must contain at least one number'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Password must contain at least one number'}, status=400)
             if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', plain_password):
-                return Response({'error': 'Password must contain at least one special character'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Password must contain at least one special character'}, status=400)
             
             plain_confirm = decrypt_frontend_password(data['confirm_password'])
             if not plain_confirm or plain_password != plain_confirm:
-                return Response({'error': 'Passwords do not match'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Passwords do not match'}, status=400)
             
             with transaction.atomic():
                 if existing_user:
@@ -292,7 +294,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.full_name = f"{user.first_name} {user.last_name}".strip()
                     user.phone_number = phone_number
                     user.set_password(plain_password)
-                    user.date_joined = timezone.now()
+                    user.joined_date = timezone.now()
+                    user.is_onboarding_complete = True
                     user.terms_accepted = data['terms_accepted']
                     user.save()
                     logger.info(f"Invited user completed signup: {user.email}")
@@ -349,7 +352,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 
         except Exception as e:
             logger.error(f"Signup error: {e}")
-            return Response({'error': 'Signup failed', 'details': str(e)}, status=500)
+            return Response({'success': False, 'errorMessage': 'Signup failed'}, status=500)
 
     @swagger_auto_schema(
         method='post',
@@ -363,7 +366,7 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer = EmailVerificationSerializer(data=request.data)
             if not serializer.is_valid():
                 logger.warning(f"Email verification serializer validation failed: {serializer.errors}")
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid input', 'details': serializer.errors}, status=400)
             
             token = serializer.validated_data['token']
             logger.info(f"Attempting to verify email with token: {token[:20]}...")
@@ -372,15 +375,17 @@ class UserViewSet(viewsets.ModelViewSet):
                 user = UserModel.objects.get(email_verification_token=token)
                 logger.info(f"Found user with token: {user.email}, is_email_verified: {user.is_email_verified}")
                 
-                if user.is_email_verified:
-                    return Response({'error': 'Email already verified'}, status=400)
+                # For invited users, allow re-verification until onboarding is complete
+                if user.is_email_verified and user.is_onboarding_complete:
+                    return Response({'success': False, 'errorMessage': 'Email already verified'}, status=400)
                 
                 if user.verify_email(token):
                     user.is_active = True
                     user.status = 'active'
-
-                    user.save(update_fields=['is_active', 'status'])
-
+                    # Only clear token after onboarding is complete
+                    if user.is_onboarding_complete:
+                        user.email_verification_token = None
+                    user.save(update_fields=['is_active', 'status', 'email_verification_token'])
                     logger.info(f"Email verified successfully for user: {user.email}")
 
                     # Publish event to Redis after email verification
@@ -414,15 +419,15 @@ class UserViewSet(viewsets.ModelViewSet):
                     })
                 else:
                     logger.warning(f"verify_email method returned False for user: {user.email}")
-                    return Response({'error': 'Invalid or expired verification token'}, status=400)
+                    return Response({'success': False, 'errorMessage': 'Invalid or expired verification token'}, status=400)
                     
             except UserModel.DoesNotExist:
                 logger.warning(f"No user found with verification token: {token[:20]}...")
-                return Response({'error': 'Invalid verification token'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid verification token'}, status=400)
                 
         except Exception as e:
             logger.error(f"Email verification error: {e}", exc_info=True)
-            return Response({'error': 'Email verification failed'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Email verification failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -441,26 +446,24 @@ class UserViewSet(viewsets.ModelViewSet):
     def logout(self, request):
         """Logout user by revoking refresh tokens and blacklisting access tokens"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
             if not auth_header:
                 logger.warning("Logout attempt without authorization header")
-                return Response({'error': 'Authorization header required'}, status=401)
+                return Response({'success': False, 'errorMessage': 'Authorization header required'}, status=401)
             
             if not auth_header.startswith('Bearer '):
                 logger.warning("Logout attempt with invalid authorization header format")
-                return Response({'error': 'Invalid authorization header format'}, status=401)
+                return Response({'success': False, 'errorMessage': 'Invalid authorization header format'}, status=401)
             
-            token_parts = auth_header.split(' ')
-            if len(token_parts) != 2:
-                logger.warning("Logout attempt with malformed authorization header")
-                return Response({'error': 'Invalid authorization header format'}, status=401)
-            
-            token = token_parts[1]
+            token = auth_header[7:].strip()
+            if not token:
+                logger.warning("Logout attempt with empty token")
+                return Response({'success': False, 'errorMessage': 'Token is empty'}, status=401)
             payload = validate_jwt(token)
             
             if not payload:
                 logger.warning("Logout attempt with invalid token")
-                return Response({'error': 'Invalid or expired token'}, status=401)
+                return Response({'success': False, 'errorMessage': 'Invalid or expired token'}, status=401)
             
             user_id = payload.get('sub')
             user_email = payload.get('email')
@@ -473,24 +476,26 @@ class UserViewSet(viewsets.ModelViewSet):
                     active_tokens = RefreshToken.objects.filter(user=user, is_revoked=False)
                     if not active_tokens.exists():
                         logger.warning(f"Logout attempt for already logged out user: {user_email}")
-                        return Response({'error': 'User is already logged out'}, status=400)
+                        return Response({
+                            'success': False,
+                            'errorMessage': 'User is already logged out'
+                        }, status=status.HTTP_400_BAD_REQUEST)
                     
                     active_tokens.update(is_revoked=True)
-                    
-                    TokenBlacklist.revoke_user_tokens(user_id, reason='logout')
+                    TokenBlacklist.revoke_user_tokens(user_id, reason='logout') 
                     
                     logger.info(f"Successful logout for user: {user_email}")
-                    return Response({'message': 'Logout successful'})
-                except UserModel.DoesNotExist:
+                    return Response({'message': 'Logout successful'})   
+                except UserModel.DoesNotExist:  
                     logger.error(f"Logout failed - user not found: {user_id}")
-                    return Response({'error': 'User not found'}, status=404)
+                    return Response({'success': False, 'errorMessage': 'User not found'}, status=404)
             
             logger.warning("Logout failed - invalid token format")
-            return Response({'error': 'Invalid token format'}, status=400)
+            return Response({'success': False, 'errorMessage': 'Invalid token format'}, status=400)
             
         except Exception as e:
             logger.error(f"Logout error: {e}")
-            return Response({'error': 'Logout failed', 'details': str(e)}, status=500)
+            return Response({'success': False, 'errorMessage': 'Logout failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -503,14 +508,14 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             serializer = ForgotPasswordSerializer(data=request.data)
             if not serializer.is_valid():
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid input', 'details': serializer.errors}, status=400)
             
             email = serializer.validated_data['email']
             
             try:
                 user = UserModel.objects.get(email=email, is_deleted=False)
                 if not user.is_active:
-                    return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
+                    return Response({'success': False, 'errorMessage': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
                 
                 if user.password_reset_sent_at:
                     time_since_last_reset = timezone.now() - user.password_reset_sent_at
@@ -531,11 +536,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 return Response({'message': "We've sent a password reset link to your email. Please check your inbox or spam folder."})
                 
             except UserModel.DoesNotExist:
-                return Response({'error': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
+                return Response({'success': False, 'errorMessage': 'This email is not registered with Journies. Please try again or create a new account.'}, status=404)
                 
         except Exception as e:
             logger.error(f"Forgot password error: {e}")
-            return Response({'error': 'Failed to send reset email'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Failed to send reset email'}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -548,7 +553,7 @@ class UserViewSet(viewsets.ModelViewSet):
         try:
             serializer = ResetPasswordSerializer(data=request.data)
             if not serializer.is_valid():
-                return Response({'error': 'Invalid input', 'details': serializer.errors}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid input', 'details': serializer.errors}, status=400)
             
             token = serializer.validated_data['token']
             new_password = serializer.validated_data['new_password']
@@ -558,20 +563,20 @@ class UserViewSet(viewsets.ModelViewSet):
                 user = UserModel.objects.get(password_reset_token=token, is_deleted=False)
                 
                 if user.check_password(new_password):
-                    return Response({'error': 'This password was used recently. Please choose a new one.'}, status=400)
+                    return Response({'success': False, 'errorMessage': 'This password was used recently. Please choose a new one.'}, status=400)
                 
-                if user.reset_password_with_token(token, new_password, confirm_password):
+                if user.reset_password_with_token(token, new_password):
                     logger.info(f"Password reset successful for user: {user.email}")
                     return Response({'message': 'Your password has been reset successfully. Please sign in with your new password.'})
                 else:
-                    return Response({'error': 'Invalid or expired reset token'}, status=400)
+                    return Response({'success': False, 'errorMessage': 'Invalid or expired reset token'}, status=400)
                     
             except UserModel.DoesNotExist:
-                return Response({'error': 'Invalid or expired reset token'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Invalid or expired reset token'}, status=400)
                 
         except Exception as e:
             logger.error(f"Reset password error: {e}")
-            return Response({'error': 'Password reset failed'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Password reset failed'}, status=500)
     
     @swagger_auto_schema(
         method='post',
@@ -593,7 +598,7 @@ class UserViewSet(viewsets.ModelViewSet):
             reason = request.data.get('reason', 'admin_action')
             
             if not user_id:
-                return Response({'error': 'user_id is required'}, status=400)
+                return Response({'success': False, 'errorMessage': 'user_id is required'}, status=400)
             
             try:
                 from auth_app.models.user_model import TokenBlacklist
@@ -606,11 +611,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 return Response({'message': 'All tokens revoked successfully'})
                 
             except UserModel.DoesNotExist:
-                return Response({'error': 'User not found'}, status=404)
+                return Response({'success': False, 'errorMessage': 'User not found'}, status=404)
                 
         except Exception as e:
             logger.error(f"Token revocation error: {e}")
-            return Response({'error': 'Token revocation failed'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Token revocation failed'}, status=500)
     
     
     @swagger_auto_schema(
@@ -638,29 +643,29 @@ class UserViewSet(viewsets.ModelViewSet):
     def change_password(self, request):
         """Change password for authenticated user"""
         try:
-            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-            if not auth_header.startswith('Bearer '):
-                return Response({'error': 'Authorization header required'}, status=401)
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').strip()
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return Response({'success': False, 'errorMessage': 'Authorization header required'}, status=401)
             
-            token = auth_header.split(' ')[1]
+            token = auth_header[7:].strip()
             payload = validate_jwt(token)
             
             if not payload:
-                return Response({'error': 'Invalid token'}, status=401)
+                return Response({'success': False, 'errorMessage': 'Invalid token'}, status=401)
             
             current_password = request.data.get('current_password')
             new_password = request.data.get('new_password')
             
             if not current_password or not new_password:
-                return Response({'error': 'Current and new passwords are required'}, status=400)
+                return Response({'success': False, 'errorMessage': 'Current and new passwords are required'}, status=400)
             
             try:
                 user = UserModel.objects.get(id=payload['sub'])
                 if user.is_deleted or not user.is_active:
-                    return Response({'error': 'User account is inactive'}, status=401)
+                    return Response({'success': False, 'errorMessage': 'User account is inactive'}, status=401)
                 
                 if not user.check_password(current_password):
-                    return Response({'error': 'Current password is incorrect'}, status=401)
+                    return Response({'success': False, 'errorMessage': 'Current password is incorrect'}, status=401)
                 
                 user.set_password(new_password)
                 user.save()
@@ -671,8 +676,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 return Response({'message': 'Password changed successfully'})
                 
             except UserModel.DoesNotExist:
-                return Response({'error': 'User not found'}, status=404)
+                return Response({'success': False, 'errorMessage': 'User not found'}, status=404)
                 
         except Exception as e:
             logger.error(f"Password change error: {e}")
-            return Response({'error': 'Password change failed'}, status=500)
+            return Response({'success': False, 'errorMessage': 'Password change failed'}, status=500)
