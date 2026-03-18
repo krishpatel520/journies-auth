@@ -7,7 +7,8 @@ from decouple import config
 def main():
 
     port = config('PORT')
-    base_route = config('BASE_ROUTE')
+    base_route = config('BASE_ROUTE', default='')
+
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'auth_service.settings')
     try:

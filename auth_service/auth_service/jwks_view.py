@@ -3,6 +3,7 @@ from cryptography.hazmat.primitives import serialization
 import base64
 import logging
 from auth_service.utils.auth_utils import load_public_key
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ def jwks_view(request):
             "kty": "RSA",
             "use": "sig",
             "alg": "RS256",
-            "kid": "auth-service-key",
+            "kid": settings.JWT_KID, 
             "n": n,
             "e": e,
         }
