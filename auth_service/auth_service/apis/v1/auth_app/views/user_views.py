@@ -329,26 +329,19 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.save()
                     logger.info(f"New owner signup: {user.email}, tenant_id: {tenant.id}")
 
+                # Send verification email inside transaction
                 try:
                     user.send_verification_email(request)
-                    email_sent = True
+                    logger.info(f"Verification email sent successfully to: {user.email}")
                 except Exception as e:
                     logger.error(f"Failed to send verification email: {e}")
-                    email_sent = False
+                    raise Exception("Failed to send verification email")
 
-                if email_sent:
-                    return Response({
-                        'message': "We have sent a verification link to your email.",
-                        'email': user.email,
-                        'verification_required': True
-                    }, status=201)
-                else:
-                    return Response({
-                        'message': 'Account created but failed to send verification email',
-                        'email': user.email,
-                        'verification_required': True,
-                        'retry_available': True
-                    }, status=201)
+            return Response({
+                'message': "We have sent a verification link to your email.",
+                'email': user.email,
+                'verification_required': True
+            }, status=201)
                 
         except Exception as e:
             logger.error(f"Signup error: {e}")

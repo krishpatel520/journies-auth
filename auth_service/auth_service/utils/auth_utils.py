@@ -66,12 +66,21 @@ def load_public_key():
         logger.error(f"Failed to load public key: {e}")
         raise
 
-def generate_jwt(user_id, email, tenant_id, is_superuser=False, role_id=None, is_onboarding_complete=False, is_plan_purchased=False):
-    """Generate JWT with tenant info and role"""
+def generate_jwt(
+    user_id,
+    email,
+    tenant_id,
+    is_superuser=False,
+    role_id=None,
+    is_onboarding_complete=False,
+    is_plan_purchased=False,
+):
     try:
         with open(settings.JWT_PRIVATE_KEY_PATH, "r") as f:
             private_key = f.read()
-        
+
+        now = datetime.now(timezone.utc)
+
         payload = {
             "sub": str(user_id),
             "email": email,
@@ -79,17 +88,24 @@ def generate_jwt(user_id, email, tenant_id, is_superuser=False, role_id=None, is
             "is_superuser": is_superuser,
             "is_onboarding_complete": is_onboarding_complete,
             "is_plan_purchased": is_plan_purchased,
-            "iat": datetime.now(timezone.utc),
-            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+            "iat": now,
+            "exp": now + timedelta(minutes=60),
             "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,  
         }
-        
+
         if role_id:
             payload["role_id"] = int(role_id)
-        
-        token = jwt.encode(payload, private_key, algorithm=settings.JWT_ALGORITHM)
-        logger.info(f"JWT generated for user {email} in tenant {tenant_id}")
+
+        token = jwt.encode(
+            payload,
+            private_key,
+            algorithm=settings.JWT_ALGORITHM,
+            headers={"kid": settings.JWT_KID},  
+        )
+
         return token
+
     except Exception as e:
         logger.error(f"Failed to generate JWT for user {email}: {e}")
         raise
@@ -100,13 +116,13 @@ def validate_jwt(token, use_jwks=False, jwks_url=None):
         if not token:
             logger.debug("Empty token provided for validation")
             return None
-        
+
         if use_jwks:
             from jwt import PyJWKClient
+
             if not jwks_url:
-                jwks_url = f"http://127.0.0.1:{config('PORT')}/.well-known/jwks.json"
-            
-            logger.debug(f"Using JWKS validation with URL: {jwks_url}")
+                jwks_url = f"{settings.AUTH_SERVICE_URL}/.well-known/jwks.json"
+
             jwks_client = PyJWKClient(jwks_url)
             signing_key = jwks_client.get_signing_key_from_jwt(token)
             key = signing_key.key
@@ -129,14 +145,9 @@ def validate_jwt(token, use_jwks=False, jwks_url=None):
         logger.debug(f"JWT validated successfully for user {payload.get('email')}")
         return payload
     except jwt.ExpiredSignatureError:
-        logger.warning("JWT token has expired")
+        logger.warning("Token expired")
         return None
-    except jwt.InvalidIssuerError as e:
-        logger.warning(f"Invalid JWT issuer: {e}. Expected: {settings.JWT_ISSUER}")
-        return None
+
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid JWT token: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"JWT validation error: {e}")
+        logger.warning(f"Invalid token: {e}")
         return None
