@@ -81,6 +81,9 @@ def generate_jwt(
 
         now = datetime.now(timezone.utc)
 
+        # Never expire in development
+        exp_time = datetime.now(timezone.utc) + timedelta(days=365*10) if settings.DEBUG else datetime.now(timezone.utc) + timedelta(hours=1)
+        
         payload = {
             "sub": str(user_id),
             "email": email,
@@ -89,7 +92,7 @@ def generate_jwt(
             "is_onboarding_complete": is_onboarding_complete,
             "is_plan_purchased": is_plan_purchased,
             "iat": now,
-            "exp": now + timedelta(minutes=60),
+            "exp": exp_time,
             "iss": settings.JWT_ISSUER,
             "aud": settings.JWT_AUDIENCE,  
         }
@@ -134,7 +137,8 @@ def validate_jwt(token, use_jwks=False, jwks_url=None):
             token,
             key,
             algorithms=[settings.JWT_ALGORITHM],
-            issuer=settings.JWT_ISSUER
+            issuer=settings.JWT_ISSUER,
+            audience=settings.JWT_AUDIENCE
         )
         
         # Additional validation
