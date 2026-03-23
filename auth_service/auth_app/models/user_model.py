@@ -229,7 +229,9 @@ class UserModel(AbstractUser):
         if self.invited_by_id:
             # Invited user
             from auth_app.models.property_model import Property
-            property = Property.objects.get(tenant_id=self.tenant_id)
+            property = Property.objects.filter(tenant_id=self.tenant_id).first()
+            if not property:
+                raise Exception("No property found for tenant")     
             property_name = property.property_name
             
             subject = f"Join {property_name} Journey!"
