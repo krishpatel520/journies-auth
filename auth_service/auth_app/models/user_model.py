@@ -225,7 +225,7 @@ class UserModel(AbstractUser):
         base_url = getattr(settings, 'FRONTEND_URL', 'http://192.168.71.244/login')
         verification_url = f"{base_url}/verify-email?token={token}"
         logo_url = getattr(settings, 'LOGO_URL', None)
-        
+        content_html = None
         if self.invited_by_id:
             # Invited user
             from auth_app.models.property_model import Property
