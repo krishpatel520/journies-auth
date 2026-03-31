@@ -35,10 +35,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'msbc_rbac.accounts',
+    'msbc_rbac.core',
     'auth_app',
     'rest_framework',
     'drf_yasg',
-    'corsheaders',]
+    'corsheaders',
+]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -49,11 +52,14 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'auth_service.middleware.jwt_auth.JWTAuthenticationMiddleware',  # JWT authentication - BEFORE Django auth
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'auth_service.middleware.jwt_auth.JWTAuthenticationMiddleware',  # JWT authentication - AFTER Django auth so it overwrites AnonymousUser
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'auth_service.middleware.tenant_context.TenantContextMiddleware',  # Multi-tenant RLS
+    'msbc_rbac.core.middleware.CurrentTenantMiddleware',  # RBAC Tenant resolution
+    'msbc_rbac.core.services.RBACMiddleware.RBACMiddleware',  # RBAC Module/SubModule interceptor
+    'msbc_rbac.core.exception_middleware.JSONExceptionMiddleware',  # MUST BE LAST
 ]
 
 # CSRF and Security Settings
@@ -94,8 +100,28 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST': config('DB_HOST'),
         'PORT': config('DB_PORT'),
-    }
+    },
+    # -----------------------------------------------------------------------
+    # rbac_project — owns all msbc_rbac tables (accounts.*, core.*, tenant)
+    # The RBACDatabaseRouter routes all msbc_rbac models here.
+    # The journies (default) DB must NEVER contain RBAC tables.
+    # -----------------------------------------------------------------------
+    'rbac': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('RBAC_DB_NAME', default='rbac_project'),
+        'USER': config('RBAC_DB_USER', default=config('DB_USER')),
+        'PASSWORD': config('RBAC_DB_PASSWORD', default=config('DB_PASSWORD')),
+        'HOST': config('RBAC_DB_HOST', default=config('DB_HOST')),
+        'PORT': config('RBAC_DB_PORT', default=config('DB_PORT')),
+    },
 }
+
+# -----------------------------------------------------------------------
+# Database Router — enforces DB separation.
+# msbc_rbac.core + msbc_rbac.accounts  →  'rbac'  database
+# auth_app and all Django built-ins     →  'default' (auth_service) DB
+# -----------------------------------------------------------------------
+DATABASE_ROUTERS = ['auth_service.db_router.RBACDatabaseRouter']
 
 
 # Password validation
@@ -203,6 +229,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
+    'EXCEPTION_HANDLER': 'msbc_rbac.core.drf_exception_handler.custom_exception_handler',
 }
 
 # Swagger JWT Authentication
@@ -245,6 +272,10 @@ JWT_PUBLIC_PATHS = [
     '/static/',
     '/admin/'
 ]
+
+# Bypass RBAC logic for these pre-auth endpoints
+BYPASS_PATH_PREFIXES = JWT_PUBLIC_PATHS
+
 
 # Email Configuration - SMTP
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

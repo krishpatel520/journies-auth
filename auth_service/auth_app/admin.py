@@ -5,6 +5,11 @@ from auth_service.logger import logger_object
 
 logger = logger_object('auth_app.admin')
 
+try:
+    admin.site.unregister(UserModel)
+except admin.sites.NotRegistered:
+    pass
+
 @admin.register(UserModel)
 class UserModelAdmin(admin.ModelAdmin):
     list_display = ['email', 'date_joined', 'is_active']

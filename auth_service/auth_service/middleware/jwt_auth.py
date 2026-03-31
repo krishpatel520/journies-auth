@@ -84,8 +84,8 @@ def JWTAuthenticationMiddleware(get_response):
                 return JsonResponse({"detail": "User not found"}, status=401)
 
             logger.debug(f"JWT authenticated user {payload.get('email')} for {request.path_info}")
-            request.jwt_user = payload  # attach decoded user info
-            request.user = payload  # Also set user for compatibility
+            request.jwt_user = payload     # raw decoded dict
+            request.user = user            # actual UserModel instance required by RBAC
         
         return get_response(request)
     return middleware
