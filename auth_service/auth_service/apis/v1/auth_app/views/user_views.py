@@ -291,6 +291,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     user = existing_user
                     user.first_name = data.get('first_name', '')
                     user.last_name = data.get('last_name', '')
+                    user.username = data.get('username') or data['email'].split('@')[0]
                     user.full_name = f"{user.first_name} {user.last_name}".strip()
                     user.phone_number = phone_number
                     user.set_password(plain_password)
@@ -300,26 +301,30 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.save()
                     logger.info(f"Invited user completed signup: {user.email}")
                 else:
-                    tenant = Tenant.objects.create(
-                        name=None,
-                        code=None,
-                        status='active'
-                    )
+                    tenant = Tenant.objects.filter(name='Journies Global Project').first()
+                    if not tenant:
+                        tenant = Tenant.objects.create(
+                            name='Journies Global Project',
+                            code='journies_global',
+                            status='active'
+                        )
                     
                     first_name = data.get('first_name', '')
                     last_name = data.get('last_name', '')
                     full_name = f"{first_name} {last_name}".strip()
                     
                     from auth_service.constants import ROLE_OWNER
+                    provided_role_id = data.get('role_id', ROLE_OWNER)
                     
                     user = UserModel(
                         tenant=tenant,
                         email=data['email'],
                         first_name=first_name,
                         last_name=last_name,
+                        username=data.get('username') or data['email'].split('@')[0],
                         full_name=full_name,
                         phone_number=phone_number,
-                        role_id=ROLE_OWNER,
+                        role_id=provided_role_id,
                         is_superuser=True,
                         is_active=False,
                         is_plan_purchased=False,

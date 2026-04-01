@@ -84,7 +84,9 @@ class SignupSerializer(serializers.Serializer):
     confirm_password = serializers.CharField(write_only=True)
     first_name = serializers.CharField(max_length=100, required=True)
     last_name = serializers.CharField(max_length=100, required=True)
+    username = serializers.CharField(max_length=255, required=False, allow_blank=True)
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    role_id = serializers.IntegerField(required=False)
     terms_accepted = serializers.BooleanField()
     
     def validate_email(self, value):

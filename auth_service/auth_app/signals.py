@@ -132,9 +132,9 @@ def sync_user_to_rbac(sender, instance, created, **kwargs):
         is_active = instance.is_active and not instance.is_deleted
 
         rbac_user, rbac_created = RBACUser.objects.using('rbac').update_or_create(
-            username=str(instance.id),          # UUID as stable cross-DB key
+            email=clean_email,                          # Stable email as cross-DB anchor
             defaults={
-                'email':      clean_email,
+                'username':   instance.username or clean_email.split('@')[0], # Safe, customizable username
                 'first_name': instance.first_name or '',
                 'last_name':  instance.last_name  or '',
                 'is_active':  is_active,
@@ -147,7 +147,7 @@ def sync_user_to_rbac(sender, instance, created, **kwargs):
             rbac_user.save(using='rbac', update_fields=['password'])
             logger.info(
                 f"[RBAC Sync] Created accounts.User for '{clean_email}' "
-                f"(username={instance.id})"
+                f"(username={instance.username or clean_email.split('@')[0]})"
             )
         else:
             logger.info(

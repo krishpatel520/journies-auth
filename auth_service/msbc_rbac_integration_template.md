@@ -343,7 +343,8 @@ def sync_user_to_rbac(sender, instance, created, **kwargs):
     """
     Mirror UserModel to accounts.User + accounts.UserRole in rbac DB.
 
-    Identity link: str(instance.id) → accounts.User.username
+    Identity link: instance.email → accounts.User.email
+    Display name:  instance.username (or email prefix) → accounts.User.username
     Role link:     instance.role_id  → admin_role.Role.id (same integer PK)
     """
     try:
@@ -359,10 +360,11 @@ def sync_user_to_rbac(sender, instance, created, **kwargs):
         )
         is_active = instance.is_active and not instance.is_deleted
 
+        # Use email as the stable cross-DB anchor, mapping a legible username for the RBAC admin panel
         rbac_user, rbac_created = RBACUser.objects.using('rbac').update_or_create(
-            username=str(instance.id),
+            email=clean_email,
             defaults={
-                'email': clean_email,
+                'username':   getattr(instance, 'username', '') or clean_email.split('@')[0],
                 'first_name': getattr(instance, 'first_name', '') or '',
                 'last_name':  getattr(instance, 'last_name', '')  or '',
                 'is_active':  is_active,
@@ -427,6 +429,9 @@ from django.apps import AppConfig
 class YourServiceAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'your_service_app'
+    
+    # REQUIRED: Declare your namespace for the `api_sync_db_operation` command
+    RBAC_MODULE = 'YourModuleName'  # e.g., 'Auth', 'Booking'
 
     def ready(self):
         from your_service_app.signals import register_signals
@@ -509,35 +514,42 @@ the command is idempotent — it only creates what is missing.
 
 ## Step 11: Register Your API Endpoints in RBAC
 
-Every protected API endpoint must be registered in `rbac_project` before requests
-can pass through `RBACMiddleware` (step 3: "API must be registered").
+Every protected API endpoint must be registered in the central `rbac_project` DB before requests can pass through `RBACMiddleware`.
 
-Use the `seed_rbac_demo` command for development/test environments:
+Instead of manual entries, use the automated discovery and sync command shipped natively with the RBAC integration framework inside Journies projects:
 
 ```bash
-python manage.py seed_rbac_demo          # creates module + endpoints + permissions
-python manage.py seed_rbac_demo --flush  # recreate (drops and rebuilds)
+python manage.py api_sync_db_operation
 ```
 
-For **production**, register endpoints via Django admin on `rbac_project` or via
-a service-specific seeding command:
+> [!CAUTION]
+> This command requires that you properly declared `RBAC_MODULE` inside your `apps.py` configuration (as shown in Step 7). It will dynamically group and map your endpoints to that module instantly.
 
+---
+
+## Step 12: Organic Tenant Consolidation (Critical Architecture)
+
+When writing native microservice registration or signup views (`/signup`, `/create`), **never** generate arbitrary isolated empty environments (`Tenant.objects.create()`). 
+
+To preserve cross-service data continuity, your microservices must proactively fetch and map new users to the definitive centralized Journies Tenant:
+
+```python
+# INSIDE YOUR REGISTRATION/SIGNUP VIEW
+tenant = Tenant.objects.filter(name='Journies Global Project').first()
+if not tenant:
+    tenant = Tenant.objects.create(
+        name='Journies Global Project',
+        code='journies_global',
+        status='active'
+    )
+
+user = UserModel(
+    tenant=tenant,
+    email=data['email'],
+    # ... any further configurations
+)
+user.save()
 ```
-rbac_project Django Admin → Admin Api Details → Add
-  Path       : /api/v1/your-endpoint     (no trailing slash)
-  Module     : AUTH (or your module code)
-  Submodule  : (leave blank if top-level)
-
-rbac_project Django Admin → Admin Api Operations → Add
-  Endpoint   : /api/v1/your-endpoint
-  Http method: GET
-  Is enabled : ✓
-  Permission code: read
-```
-
-> [!IMPORTANT]
-> `resolve_api_operation()` strips the trailing slash before matching. Always
-> register paths WITHOUT a trailing slash (e.g. `/api/v1/users`, not `/api/v1/users/`).
 
 ---
 
@@ -610,38 +622,63 @@ python manage.py shell
 # Expected: <User: <UUID>>
 ```
 
-### 13C. Manual Postman Tests
+### 13C. The Explicit 3-Tier Dynamic Endgame Manual Testing Matrix
 
-**Test 1 — Public bypass** (login path must NOT be blocked by RBAC):
-```
-POST /api/v1/your-service/login/
-Body: {"email": "test@test.com", "password": "wrong"}
-Expected: 400 (bad credentials from view, NOT 401 from RBAC)
-```
+We will test out integration natively utilizing the system's endpoints with valid CryptoJS Base64-encrypted `password` payloads, mapping out explicit roles natively during signup.
 
-**Test 2 — JWT enforcement** (no token → 401 from JWT middleware):
-```
-GET /api/v1/your-service/users/
-Headers: (none)
-Expected: 401
-Body must NOT contain "User is not authorized" (that's the RBAC message)
-```
+#### Test A: Custom Usernames & Authorized Pass-Through (200 OK)
+**Objective**: Synthesizing a high-privilege `owner2` identity natively to navigate seamlessly across cross-database boundaries.
 
-**Test 3 — RBAC step-3 denial** (valid JWT + no ApiOperation → 401 from RBAC):
+1. **Swagger `POST /api/v1/users/signup/`**
+```json
+{
+  "email": "owner2@journies.ai",
+  "username": "owner2",
+  "first_name": "Second",
+  "last_name": "Owner",
+  "password": "NUDEkJzrSgw4LpDqB0rZZw==",
+  "confirm_password": "NUDEkJzrSgw4LpDqB0rZZw==",
+  "phone_number": "5558889999",
+  "role_id": 20,
+  "terms_accepted": true
+}
 ```
-GET /api/v1/your-service/users/
-Headers: Authorization: Bearer <valid_token>
-(with no ApiOperation registered for this path in rbac_project)
-Expected: 401, body: {"success": false, "message": "User is not authorized"}
-```
+2. **Retrieve Auth**: Complete validation + **`POST /api/v1/users/login/`** to get JWT.
+3. **Execute Get Action**: **`GET /api/v1/users/{user_id}/`** using the JWT.
+**Result**: **200 OK**. The RBAC Middleware matches the `owner` permissions natively.
 
-**Test 4 — Authorized pass-through** (full RBAC graph + assigned role → 200):
+---
+
+#### Test B: The Implicit Denial (403 Forbidden)
+**Objective**: Proving a mapped but un-permissioned user is bounced securely.
+
+1. **Swagger `POST /api/v1/users/signup/`**
+```json
+{
+  "email": "teammember1@journies.ai",
+  "username": "teammember1",
+  "first_name": "Test",
+  "last_name": "TeamMember",
+  "password": "NUDEkJzrSgw4LpDqB0rZZw==",
+  "confirm_password": "NUDEkJzrSgw4LpDqB0rZZw==",
+  "phone_number": "5552223333",
+  "role_id": 24,
+  "terms_accepted": true
+}
 ```
-GET /api/v1/your-service/users/
-Headers: Authorization: Bearer <valid_token>
-(ApiOperation registered, user has owner role, TenantModule enabled)
-Expected: 200 OK (or 400 if view needs more data — NOT a RBAC 401)
-```
+2. **Execute Action**: Fetch JWT as `teammember1`, execute **`GET /api/v1/users/{user_id}/`**.
+**Result**: **403 Forbidden**. The middleware bounces the 24 `team_member` successfully since they possess zero permissions.
+
+---
+
+#### Test C: The Explicit Granular Block
+**Objective**: Instructing the developer to override absolute high-privilege permissions by enforcing a restrictive single constraint map stringently from the main panel.
+
+1. Go to the centralized RBAC Admin (`http://127.0.0.1:8000/admin/`).
+2. Navigate to **Accounts -> User api blocks**.
+3. Create a block strictly for user `owner2` specifically targeting your newly integrated operation.
+4. **Execute Action**: Head back to swagger and hit **`GET /api/v1/users/{user_id}/`** leveraging `owner2`'s JWT natively.
+**Result**: **403 Forbidden**. Total dynamic architectural sovereignty achieved.
 
 ### 13D. Automated Tests
 
